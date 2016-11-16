@@ -1,10 +1,11 @@
 #ifndef CLIENT_HTTP_HPP
 #define	CLIENT_HTTP_HPP
 
-#include <boost/asio.hpp>
-#include <boost/utility/string_ref.hpp>
-#include <boost/algorithm/string/predicate.hpp>
-#include <boost/functional/hash.hpp>
+#if defined(_MSC_VER)
+#pragma warning(disable:4503)
+#endif
+
+#include "asio_wrapper.hpp"
 
 #include <unordered_map>
 #include <map>
@@ -19,19 +20,23 @@ namespace SimpleWeb {
         class Response {
             friend class ClientBase<socket_type>;
             
-            //Based on http://www.boost.org/doc/libs/1_60_0/doc/html/unordered/hash_equality.html
             class iequal_to {
             public:
               bool operator()(const std::string &key1, const std::string &key2) const {
-                return boost::algorithm::iequals(key1, key2);
+			   return key1.size() == key2.size()
+					&& equal(key1.cbegin(), key1.cend(), key2.cbegin(),
+						[](std::string::value_type key1v, std::string::value_type key2v)
+							{ return tolower(key1v) == tolower(key2v); });
               }
             };
             class ihash {
             public:
               size_t operator()(const std::string &key) const {
                 std::size_t seed=0;
-                for(auto &c: key)
-                  boost::hash_combine(seed, std::tolower(c));
+                for(auto &c: key) {
+				  std::hash<char> hasher;
+				  seed ^= hasher(std::tolower(c)) + 0x9e3779b9 + (seed<<6) + (seed>>2);
+				}
                 return seed;
               }
             };
@@ -43,18 +48,18 @@ namespace SimpleWeb {
             std::unordered_multimap<std::string, std::string, ihash, iequal_to> header;
             
         private:
-            boost::asio::streambuf content_buffer;
+            asio::streambuf content_buffer;
             
             Response(): content(&content_buffer) {}
         };
         
-        std::shared_ptr<Response> request(const std::string& request_type, const std::string& path="/", boost::string_ref content="",
+        std::shared_ptr<Response> request(const std::string& request_type, const std::string& path="/", const std::string content="",
                 const std::map<std::string, std::string>& header=std::map<std::string, std::string>()) {
             std::string corrected_path=path;
             if(corrected_path=="")
                 corrected_path="/";
             
-            boost::asio::streambuf write_buffer;
+            asio::streambuf write_buffer;
             std::ostream write_stream(&write_buffer);
             write_stream << request_type << " " << corrected_path << " HTTP/1.1\r\n";
             write_stream << "Host: " << host << "\r\n";
@@ -68,9 +73,9 @@ namespace SimpleWeb {
             try {
                 connect();
                 
-                boost::asio::write(*socket, write_buffer);
+                asio::write(*socket, write_buffer);
                 if(content.size()>0)
-                    boost::asio::write(*socket, boost::asio::buffer(content.data(), content.size()));
+                    asio::write(*socket, asio::buffer(content.data(), content.size()));
                 
             }
             catch(const std::exception& e) {
@@ -91,7 +96,7 @@ namespace SimpleWeb {
             auto content_length=content.tellp();
             content.seekp(0, std::ios::beg);
             
-            boost::asio::streambuf write_buffer;
+            asio::streambuf write_buffer;
             std::ostream write_stream(&write_buffer);
             write_stream << request_type << " " << corrected_path << " HTTP/1.1\r\n";
             write_stream << "Host: " << host << "\r\n";
@@ -107,7 +112,7 @@ namespace SimpleWeb {
             try {
                 connect();
                 
-                boost::asio::write(*socket, write_buffer);
+                asio::write(*socket, write_buffer);
             }
             catch(const std::exception& e) {
                 socket_error=true;
@@ -118,9 +123,9 @@ namespace SimpleWeb {
         }
         
     protected:
-        boost::asio::io_service io_service;
-        boost::asio::ip::tcp::endpoint endpoint;
-        boost::asio::ip::tcp::resolver resolver;
+        asio::io_service io_service;
+        asio::ip::tcp::endpoint endpoint;
+        asio::ip::tcp::resolver resolver;
         
         std::shared_ptr<socket_type> socket;
         bool socket_error;
@@ -140,7 +145,7 @@ namespace SimpleWeb {
                 port=static_cast<unsigned short>(stoul(host_port.substr(host_end+1)));
             }
 
-            endpoint=boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port);
+            endpoint=asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port);
         }
         
         virtual void connect()=0;
@@ -175,7 +180,7 @@ namespace SimpleWeb {
             std::shared_ptr<Response> response(new Response());
             
             try {
-                size_t bytes_transferred = boost::asio::read_until(*socket, response->content_buffer, "\r\n\r\n");
+                size_t bytes_transferred = asio::read_until(*socket, response->content_buffer, "\r\n\r\n");
                 
                 size_t num_additional_bytes=response->content_buffer.size()-bytes_transferred;
                 
@@ -185,18 +190,18 @@ namespace SimpleWeb {
                 if(header_it!=response->header.end()) {
                     auto content_length=stoull(header_it->second);
                     if(content_length>num_additional_bytes) {
-                        boost::asio::read(*socket, response->content_buffer, 
-                                boost::asio::transfer_exactly(content_length-num_additional_bytes));
+                        asio::read(*socket, response->content_buffer, 
+                                asio::transfer_exactly(content_length-num_additional_bytes));
                     }
                 }
                 else if((header_it=response->header.find("Transfer-Encoding"))!=response->header.end() && header_it->second=="chunked") {
-                    boost::asio::streambuf streambuf;
+                    asio::streambuf streambuf;
                     std::ostream content(&streambuf);
                     
                     std::streamsize length;
                     std::string buffer;
                     do {
-                        size_t bytes_transferred = boost::asio::read_until(*socket, response->content_buffer, "\r\n");
+                        size_t bytes_transferred = asio::read_until(*socket, response->content_buffer, "\r\n");
                         std::string line;
                         getline(response->content, line);
                         bytes_transferred-=line.size()+1;
@@ -206,8 +211,8 @@ namespace SimpleWeb {
                         auto num_additional_bytes=static_cast<std::streamsize>(response->content_buffer.size()-bytes_transferred);
                     
                         if((2+length)>num_additional_bytes) {
-                            boost::asio::read(*socket, response->content_buffer, 
-                                boost::asio::transfer_exactly(2+length-num_additional_bytes));
+                            asio::read(*socket, response->content_buffer, 
+                                asio::transfer_exactly(2+length-num_additional_bytes));
                         }
 
                         buffer.resize(static_cast<size_t>(length));
@@ -235,7 +240,7 @@ namespace SimpleWeb {
     template<class socket_type>
     class Client : public ClientBase<socket_type> {};
     
-    typedef boost::asio::ip::tcp::socket HTTP;
+    typedef asio::ip::tcp::socket HTTP;
     
     template<>
     class Client<HTTP> : public ClientBase<HTTP> {
@@ -247,10 +252,10 @@ namespace SimpleWeb {
     protected:
         void connect() {
             if(socket_error || !socket->is_open()) {
-                boost::asio::ip::tcp::resolver::query query(host, std::to_string(port));
-                boost::asio::connect(*socket, resolver.resolve(query));
+                asio::ip::tcp::resolver::query query(host, std::to_string(port));
+                asio::connect(*socket, resolver.resolve(query));
                 
-                boost::asio::ip::tcp::no_delay option(true);
+                asio::ip::tcp::no_delay option(true);
                 socket->set_option(option);
                 
                 socket_error=false;

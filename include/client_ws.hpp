@@ -1,15 +1,14 @@
 #ifndef CLIENT_WS_HPP
 #define	CLIENT_WS_HPP
 
-#include "crypto.hpp"
-
-#include <boost/asio.hpp>
+#include "asio_wrapper.hpp"
 
 #include <unordered_map>
 #include <iostream>
 #include <random>
 #include <atomic>
 #include <list>
+#include "crypto.hpp"
 
 namespace SimpleWeb {
     template <class socket_type>
@@ -23,7 +22,7 @@ namespace SimpleWeb {
         class SendStream : public std::iostream {
             friend class SocketClientBase<socket_type>;
         private:
-            boost::asio::streambuf streambuf;
+            asio::streambuf streambuf;
         public:
             SendStream(): std::iostream(&streambuf) {}
             size_t size() {
@@ -45,22 +44,22 @@ namespace SimpleWeb {
             
             class SendData {
             public:
-                SendData(const std::shared_ptr<SendStream> &send_stream, const std::function<void(const boost::system::error_code)> &callback) :
+                SendData(const std::shared_ptr<SendStream> &send_stream, const std::function<void(const std::error_code)> &callback) :
                         send_stream(send_stream), callback(callback) {}
                 std::shared_ptr<SendStream> send_stream;
-                std::function<void(const boost::system::error_code)> callback;
+                std::function<void(const std::error_code)> callback;
             };
             
             std::unique_ptr<socket_type> socket;
             
-            boost::asio::strand strand;
+            asio::io_context::strand strand;
             
             std::list<SendData> send_queue;
             
             void send_from_queue() {
                 strand.post([this]() {
-                    boost::asio::async_write(*socket, send_queue.begin()->send_stream->streambuf,
-                            strand.wrap([this](const boost::system::error_code& ec, size_t /*bytes_transferred*/) {
+                    asio::async_write(*socket, send_queue.begin()->send_stream->streambuf,
+                            strand.wrap([this](const std::error_code& ec, size_t /*bytes_transferred*/) {
                         auto send_queued=send_queue.begin();
                         if(send_queued->callback)
                             send_queued->callback(ec);
@@ -106,17 +105,17 @@ namespace SimpleWeb {
         private:
             Message(): std::istream(&streambuf) {}
             size_t length;
-            boost::asio::streambuf streambuf;
+            asio::streambuf streambuf;
         };
         
         std::function<void(void)> onopen;
         std::function<void(std::shared_ptr<Message>)> onmessage;
-        std::function<void(const boost::system::error_code&)> onerror;
+        std::function<void(const std::error_code&)> onerror;
         std::function<void(int, const std::string&)> onclose;
         
         void start() {
             if(!io_service) {
-                io_service=std::make_shared<boost::asio::io_service>();
+                io_service=std::make_shared<asio::io_service>();
                 internal_io_service=true;
             }
             
@@ -124,7 +123,7 @@ namespace SimpleWeb {
                 io_service->reset();
             
             if(!resolver)
-                resolver=std::unique_ptr<boost::asio::ip::tcp::resolver>(new boost::asio::ip::tcp::resolver(*io_service));
+                resolver=std::unique_ptr<asio::ip::tcp::resolver>(new asio::ip::tcp::resolver(*io_service));
             
             connect();
             
@@ -140,7 +139,7 @@ namespace SimpleWeb {
         
         ///fin_rsv_opcode: 129=one fragment, text, 130=one fragment, binary, 136=close connection.
         ///See http://tools.ietf.org/html/rfc6455#section-5.2 for more information
-        void send(const std::shared_ptr<SendStream> &message_stream, const std::function<void(const boost::system::error_code&)>& callback=nullptr,
+        void send(const std::shared_ptr<SendStream> &message_stream, const std::function<void(const std::error_code&)>& callback=nullptr,
                   unsigned char fin_rsv_opcode=129) {
             //Create mask
             std::vector<unsigned char> mask;
@@ -190,7 +189,7 @@ namespace SimpleWeb {
             });
         }
         
-        void send_close(int status, const std::string& reason="", const std::function<void(const boost::system::error_code&)>& callback=nullptr) {
+        void send_close(int status, const std::string& reason="", const std::function<void(const std::error_code&)>& callback=nullptr) {
             //Send close only once (in case close is initiated by client)
             if(connection->closed.load()) {
                 return;
@@ -208,13 +207,13 @@ namespace SimpleWeb {
             send(send_stream, callback, 136);
         }
         
-        /// If you have your own boost::asio::io_service, store its pointer here before running start().
-        std::shared_ptr<boost::asio::io_service> io_service;
+        /// If you have your own asio::io_service, store its pointer here before running start().
+        std::shared_ptr<asio::io_service> io_service;
     protected:
         const std::string ws_magic_string="258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
         
         bool internal_io_service=false;
-        std::unique_ptr<boost::asio::ip::tcp::resolver> resolver;
+        std::unique_ptr<asio::ip::tcp::resolver> resolver;
         
         std::string host;
         unsigned short port;
@@ -250,7 +249,7 @@ namespace SimpleWeb {
         void handshake() {
             connection->read_remote_endpoint_data();
             
-            std::shared_ptr<boost::asio::streambuf> write_buffer(new boost::asio::streambuf);
+            std::shared_ptr<asio::streambuf> write_buffer(new asio::streambuf);
             
             std::ostream request(write_buffer.get());
             
@@ -267,26 +266,26 @@ namespace SimpleWeb {
             for(int c=0;c<16;c++)
                 nonce[c]=static_cast<unsigned char>(dist(rd));
 
-            std::string nonce_base64=Crypto::Base64::encode(nonce);
+            std::string nonce_base64 = base64_encode(nonce);
             request << "Sec-WebSocket-Key: " << nonce_base64 << "\r\n";
             request << "Sec-WebSocket-Version: 13\r\n";
             request << "\r\n";
             
             //test this to base64::decode(Sec-WebSocket-Accept)
-            std::shared_ptr<std::string> accept_sha1(new std::string(Crypto::SHA1(nonce_base64+ws_magic_string)));
+            std::shared_ptr<std::string> accept_sha1(new std::string(sha1_encode(nonce_base64+ws_magic_string)));
             
-            boost::asio::async_write(*connection->socket, *write_buffer, 
+            asio::async_write(*connection->socket, *write_buffer, 
                     [this, write_buffer, accept_sha1]
-                    (const boost::system::error_code& ec, size_t /*bytes_transferred*/) {
+                    (const std::error_code& ec, size_t /*bytes_transferred*/) {
                 if(!ec) {
                     std::shared_ptr<Message> message(new Message());
 
-                    boost::asio::async_read_until(*connection->socket, message->streambuf, "\r\n\r\n",
+                    asio::async_read_until(*connection->socket, message->streambuf, "\r\n\r\n",
                             [this, message, accept_sha1]
-                            (const boost::system::error_code& ec, size_t /*bytes_transferred*/) {
+                            (const std::error_code& ec, size_t /*bytes_transferred*/) {
                         if(!ec) {                            
                             parse_handshake(*message);
-                            if(Crypto::Base64::decode(connection->header["Sec-WebSocket-Accept"])==*accept_sha1) {
+                            if(base64_decode(connection->header["Sec-WebSocket-Accept"])==*accept_sha1) {
                                 if(onopen)
                                     onopen();
                                 read_message(message);
@@ -322,8 +321,8 @@ namespace SimpleWeb {
         }
         
         void read_message(const std::shared_ptr<Message> &message) {
-            boost::asio::async_read(*connection->socket, message->streambuf, boost::asio::transfer_exactly(2),
-                    [this, message](const boost::system::error_code& ec, size_t bytes_transferred) {
+            asio::async_read(*connection->socket, message->streambuf, asio::transfer_exactly(2),
+                    [this, message](const std::error_code& ec, size_t bytes_transferred) {
                 if(!ec) {
                     if(bytes_transferred==0) { //TODO: This might happen on server at least, might also happen here
                         read_message(message);
@@ -339,7 +338,7 @@ namespace SimpleWeb {
                     if(first_bytes[1]>=128) {
                         const std::string reason("message from server masked");
                         auto kept_connection=connection;
-                        send_close(1002, reason, [this, kept_connection](const boost::system::error_code& /*ec*/) {});
+                        send_close(1002, reason, [this, kept_connection](const std::error_code& /*ec*/) {});
                         if(onclose)
                             onclose(1002, reason);
                         return;
@@ -349,9 +348,9 @@ namespace SimpleWeb {
                     
                     if(length==126) {
                         //2 next bytes is the size of content
-                        boost::asio::async_read(*connection->socket, message->streambuf, boost::asio::transfer_exactly(2),
+                        asio::async_read(*connection->socket, message->streambuf, asio::transfer_exactly(2),
                                 [this, message]
-                                (const boost::system::error_code& ec, size_t /*bytes_transferred*/) {
+                                (const std::error_code& ec, size_t /*bytes_transferred*/) {
                             if(!ec) {
                                 std::vector<unsigned char> length_bytes;
                                 length_bytes.resize(2);
@@ -373,9 +372,9 @@ namespace SimpleWeb {
                     }
                     else if(length==127) {
                         //8 next bytes is the size of content
-                        boost::asio::async_read(*connection->socket, message->streambuf, boost::asio::transfer_exactly(8),
+                        asio::async_read(*connection->socket, message->streambuf, asio::transfer_exactly(8),
                                 [this, message]
-                                (const boost::system::error_code& ec, size_t /*bytes_transferred*/) {
+                                (const std::error_code& ec, size_t /*bytes_transferred*/) {
                             if(!ec) {
                                 std::vector<unsigned char> length_bytes;
                                 length_bytes.resize(8);
@@ -408,9 +407,9 @@ namespace SimpleWeb {
         }
         
         void read_message_content(const std::shared_ptr<Message> &message) {
-            boost::asio::async_read(*connection->socket, message->streambuf, boost::asio::transfer_exactly(message->length), 
+            asio::async_read(*connection->socket, message->streambuf, asio::transfer_exactly(message->length), 
                     [this, message]
-                    (const boost::system::error_code& ec, size_t /*bytes_transferred*/) {
+                    (const std::error_code& ec, size_t /*bytes_transferred*/) {
                 if(!ec) {
                     //If connection close
                     if((message->fin_rsv_opcode&0x0f)==8) {
@@ -423,7 +422,7 @@ namespace SimpleWeb {
                         
                         auto reason=message->string();
                         auto kept_connection=connection;
-                        send_close(status, reason, [this, kept_connection](const boost::system::error_code& /*ec*/) {});
+                        send_close(status, reason, [this, kept_connection](const std::error_code& /*ec*/) {});
                         if(onclose)
                             onclose(status, reason);
                         return;
@@ -453,7 +452,7 @@ namespace SimpleWeb {
     template<class socket_type>
     class SocketClient : public SocketClientBase<socket_type> {};
     
-    typedef boost::asio::ip::tcp::socket WS;
+    typedef asio::ip::tcp::socket WS;
     
     template<>
     class SocketClient<WS> : public SocketClientBase<WS> {
@@ -462,17 +461,17 @@ namespace SimpleWeb {
         
     protected:
         void connect() {
-            boost::asio::ip::tcp::resolver::query query(host, std::to_string(port));
+            asio::ip::tcp::resolver::query query(host, std::to_string(port));
             
             resolver->async_resolve(query, [this]
-                    (const boost::system::error_code &ec, boost::asio::ip::tcp::resolver::iterator it){
+                    (const std::error_code &ec, asio::ip::tcp::resolver::iterator it){
                 if(!ec) {
                     connection=std::shared_ptr<Connection>(new Connection(new WS(*io_service)));
 
-                    boost::asio::async_connect(*connection->socket, it, [this]
-                            (const boost::system::error_code &ec, boost::asio::ip::tcp::resolver::iterator /*it*/){
+                    asio::async_connect(*connection->socket, it, [this]
+                            (const std::error_code &ec, asio::ip::tcp::resolver::iterator /*it*/){
                         if(!ec) {
-                            boost::asio::ip::tcp::no_delay option(true);
+                            asio::ip::tcp::no_delay option(true);
                             connection->socket->set_option(option);
                             
                             handshake();

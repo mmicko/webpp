@@ -1,20 +1,13 @@
 #include "server_https.hpp"
 #include "client_https.hpp"
 
-//Added for the json-example
-#define BOOST_SPIRIT_THREADSAFE
-#include <boost/property_tree/ptree.hpp>
-#include <boost/property_tree/json_parser.hpp>
 
 //Added for the default_resource example
 #include <fstream>
-#include <boost/filesystem.hpp>
 #include <vector>
 #include <algorithm>
 
 using namespace std;
-//Added for the json-example:
-using namespace boost::property_tree;
 
 typedef SimpleWeb::Server<SimpleWeb::HTTPS> HttpsServer;
 typedef SimpleWeb::Client<SimpleWeb::HTTPS> HttpsClient;
@@ -52,10 +45,11 @@ int main() {
     //}
     server.resource["^/json$"]["POST"]=[](shared_ptr<HttpsServer::Response> response, shared_ptr<HttpsServer::Request> request) {
         try {
-            ptree pt;
-            read_json(request->content, pt);
+           //ptree pt;
+           //read_json(request->content, pt);
 
-            string name=pt.get<string>("firstName")+" "+pt.get<string>("lastName");
+            //string name=pt.get<string>("firstName")+" "+pt.get<string>("lastName");
+			string name="Test Name ";
 
             *response << "HTTP/1.1 200 OK\r\n"
                       << "Content-Type: application/json\r\n"
@@ -104,39 +98,39 @@ int main() {
     //Will respond with content in the web/-directory, and its subdirectories.
     //Default file: index.html
     //Can for instance be used to retrieve an HTML 5 client that uses REST-resources on this server
-    server.default_resource["GET"]=[&server](shared_ptr<HttpsServer::Response> response, shared_ptr<HttpsServer::Request> request) {
-        try {
-            auto web_root_path=boost::filesystem::canonical("web");
-            auto path=boost::filesystem::canonical(web_root_path/request->path);
-            //Check if path is within web_root_path
-            if(distance(web_root_path.begin(), web_root_path.end())>distance(path.begin(), path.end()) ||
-               !equal(web_root_path.begin(), web_root_path.end(), path.begin()))
-                throw invalid_argument("path must be within root path");
-            if(boost::filesystem::is_directory(path))
-                path/="index.html";
-            if(!(boost::filesystem::exists(path) && boost::filesystem::is_regular_file(path)))
-                throw invalid_argument("file does not exist");
-            
-            auto ifs=make_shared<ifstream>();
-            ifs->open(path.string(), ifstream::in | ios::binary);
-            
-            if(*ifs) {
-                ifs->seekg(0, ios::end);
-                auto length=ifs->tellg();
-                
-                ifs->seekg(0, ios::beg);
-                
-                *response << "HTTP/1.1 200 OK\r\nContent-Length: " << length << "\r\n\r\n";
-                default_resource_send(server, response, ifs);
-            }
-            else
-                throw invalid_argument("could not read file");
-        }
-        catch(const exception &e) {
-            string content="Could not open path "+request->path+": "+e.what();
-            *response << "HTTP/1.1 400 Bad Request\r\nContent-Length: " << content.length() << "\r\n\r\n" << content;
-        }
-    };
+//   server.default_resource["GET"]=[&server](shared_ptr<HttpsServer::Response> response, shared_ptr<HttpsServer::Request> request) {
+//       try {
+//           auto web_root_path=boost::filesystem::canonical("web");
+//           auto path=boost::filesystem::canonical(web_root_path/request->path);
+//           //Check if path is within web_root_path
+//           if(distance(web_root_path.begin(), web_root_path.end())>distance(path.begin(), path.end()) ||
+//              !equal(web_root_path.begin(), web_root_path.end(), path.begin()))
+//               throw invalid_argument("path must be within root path");
+//           if(boost::filesystem::is_directory(path))
+//               path/="index.html";
+//           if(!(boost::filesystem::exists(path) && boost::filesystem::is_regular_file(path)))
+//               throw invalid_argument("file does not exist");
+//           
+//           auto ifs=make_shared<ifstream>();
+//           ifs->open(path.string(), ifstream::in | ios::binary);
+//           
+//           if(*ifs) {
+//               ifs->seekg(0, ios::end);
+//               auto length=ifs->tellg();
+//               
+//               ifs->seekg(0, ios::beg);
+//               
+//               *response << "HTTP/1.1 200 OK\r\nContent-Length: " << length << "\r\n\r\n";
+//               default_resource_send(server, response, ifs);
+//           }
+//           else
+//               throw invalid_argument("could not read file");
+//       }
+//       catch(const exception &e) {
+//           string content="Could not open path "+request->path+": "+e.what();
+//           *response << "HTTP/1.1 400 Bad Request\r\nContent-Length: " << content.length() << "\r\n\r\n" << content;
+//       }
+//   };
     
     thread server_thread([&server](){
         //Start server
@@ -172,7 +166,7 @@ void default_resource_send(const HttpsServer &server, const shared_ptr<HttpsServ
     if((read_length=ifs->read(&buffer[0], buffer.size()).gcount())>0) {
         response->write(&buffer[0], read_length);
         if(read_length==static_cast<streamsize>(buffer.size())) {
-            server.send(response, [&server, response, ifs](const boost::system::error_code &ec) {
+            server.send(response, [&server, response, ifs](const std::error_code &ec) {
                 if(!ec)
                     default_resource_send(server, response, ifs);
                 else

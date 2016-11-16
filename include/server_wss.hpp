@@ -2,10 +2,10 @@
 #define	SERVER_WSS_HPP
 
 #include "server_ws.hpp"
-#include <boost/asio/ssl.hpp>
+#include "asio/ssl.hpp"
 
 namespace SimpleWeb {
-    typedef boost::asio::ssl::stream<boost::asio::ip::tcp::socket> WSS;    
+    typedef asio::ssl::stream<asio::ip::tcp::socket> WSS;    
         
     template<>
     class SocketServer<WSS> : public SocketServerBase<WSS> {
@@ -15,37 +15,37 @@ namespace SimpleWeb {
                 size_t timeout_request=5, size_t timeout_idle=0, 
                 const std::string& verify_file=std::string()) : 
                 SocketServerBase<WSS>::SocketServerBase(port, num_threads, timeout_request, timeout_idle), 
-                context(boost::asio::ssl::context::tlsv12) {
+                context(asio::ssl::context::tlsv12) {
             context.use_certificate_chain_file(cert_file);
-            context.use_private_key_file(private_key_file, boost::asio::ssl::context::pem);
+            context.use_private_key_file(private_key_file, asio::ssl::context::pem);
             
             if(verify_file.size()>0)
                 context.load_verify_file(verify_file);
         }
 
     protected:
-        boost::asio::ssl::context context;
+        asio::ssl::context context;
         
         void accept() {
             //Create new socket for this connection (stored in Connection::socket)
             //Shared_ptr is used to pass temporary objects to the asynchronous functions
             std::shared_ptr<Connection> connection(new Connection(new WSS(*io_service, context)));
             
-            acceptor->async_accept(connection->socket->lowest_layer(), [this, connection](const boost::system::error_code& ec) {
+            acceptor->async_accept(connection->socket->lowest_layer(), [this, connection](const std::error_code& ec) {
                 //Immediately start accepting a new connection (if io_service hasn't been stopped)
-                if (ec != boost::asio::error::operation_aborted)
+                if (ec != asio::error::operation_aborted)
                     accept();
 
                 if(!ec) {
-                    boost::asio::ip::tcp::no_delay option(true);
+                    asio::ip::tcp::no_delay option(true);
                     connection->socket->lowest_layer().set_option(option);
                     
-                    //Set timeout on the following boost::asio::ssl::stream::async_handshake
-                    std::shared_ptr<boost::asio::deadline_timer> timer;
+                    //Set timeout on the following asio::ssl::stream::async_handshake
+                    std::shared_ptr<asio::system_timer> timer;
                     if(timeout_request>0)
                         timer=set_timeout_on_connection(connection, timeout_request);
-                    connection->socket->async_handshake(boost::asio::ssl::stream_base::server, 
-                            [this, connection, timer](const boost::system::error_code& ec) {
+                    connection->socket->async_handshake(asio::ssl::stream_base::server, 
+                            [this, connection, timer](const std::error_code& ec) {
                         if(timeout_request>0)
                             timer->cancel();
                         if(!ec) {
