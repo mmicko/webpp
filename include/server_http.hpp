@@ -108,18 +108,16 @@ namespace SimpleWeb {
         };
         ///Set before calling start().
         Config config;
+        using http_handler = std::function<void(std::shared_ptr<typename ServerBase<socket_type>::Response>, std::shared_ptr<typename ServerBase<socket_type>::Request>)>;
         
-        std::unordered_map<std::string, std::unordered_map<std::string, 
-            std::function<void(std::shared_ptr<typename ServerBase<socket_type>::Response>, std::shared_ptr<typename ServerBase<socket_type>::Request>)> > >  resource;
+        std::unordered_map<std::string, std::unordered_map<std::string, http_handler>>  resource;
         
-        std::unordered_map<std::string, 
-            std::function<void(std::shared_ptr<typename ServerBase<socket_type>::Response>, std::shared_ptr<typename ServerBase<socket_type>::Request>)> > default_resource;
+        std::unordered_map<std::string, http_handler> default_resource;
         
         std::function<void(const std::exception&)> exception_handler;
 
     private:
-        std::vector<std::pair<std::string, std::vector<std::pair<std::regex,
-            std::function<void(std::shared_ptr<typename ServerBase<socket_type>::Response>, std::shared_ptr<typename ServerBase<socket_type>::Request>)> > > > > opt_resource;
+        std::vector<std::pair<std::string, std::vector<std::pair<std::regex,http_handler>>>> opt_resource;
         
     public:
         void start() {

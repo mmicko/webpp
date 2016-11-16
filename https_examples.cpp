@@ -7,14 +7,12 @@
 #include <vector>
 #include <algorithm>
 
-using namespace std;
-
-typedef SimpleWeb::Server<SimpleWeb::HTTPS> HttpsServer;
-typedef SimpleWeb::Client<SimpleWeb::HTTPS> HttpsClient;
+using HttpsServer = SimpleWeb::Server<SimpleWeb::HTTPS>;
+using HttpsClient = SimpleWeb::Client<SimpleWeb::HTTPS>;
 
 //Added for the default_resource example
-void default_resource_send(const HttpsServer &server, const shared_ptr<HttpsServer::Response> &response,
-                           const shared_ptr<ifstream> &ifs);
+void default_resource_send(const HttpsServer &server, const std::shared_ptr<HttpsServer::Response> &response,
+                           const std::shared_ptr<std::ifstream> &ifs);
 
 int main() {
     //HTTPS-server at port 8080 using 1 thread
@@ -24,7 +22,7 @@ int main() {
     
     //Add resources using path-regex and method-string, and an anonymous function
     //POST-example for the path /string, responds the posted string
-    server.resource["^/string$"]["POST"]=[](shared_ptr<HttpsServer::Response> response, shared_ptr<HttpsServer::Request> request) {
+    server.resource["^/string$"]["POST"]=[](auto response, auto request) {
         //Retrieve string:
         auto content=request->content.string();
         //request->content.string() is a convenience function for:
@@ -43,28 +41,28 @@ int main() {
     //  "lastName": "Smith",
     //  "age": 25
     //}
-    server.resource["^/json$"]["POST"]=[](shared_ptr<HttpsServer::Response> response, shared_ptr<HttpsServer::Request> request) {
+    server.resource["^/json$"]["POST"]=[](auto response, auto request) {
         try {
            //ptree pt;
            //read_json(request->content, pt);
 
             //string name=pt.get<string>("firstName")+" "+pt.get<string>("lastName");
-			string name="Test Name ";
+            std::string name="Test Name ";
 
             *response << "HTTP/1.1 200 OK\r\n"
                       << "Content-Type: application/json\r\n"
                       << "Content-Length: " << name.length() << "\r\n\r\n"
                       << name;
         }
-        catch(exception& e) {
+        catch(std::exception& e) {
             *response << "HTTP/1.1 400 Bad Request\r\nContent-Length: " << strlen(e.what()) << "\r\n\r\n" << e.what();
         }
     };
     
     //GET-example for the path /info
     //Responds with request-information
-    server.resource["^/info$"]["GET"]=[](shared_ptr<HttpsServer::Response> response, shared_ptr<HttpsServer::Request> request) {
-        stringstream content_stream;
+    server.resource["^/info$"]["GET"]=[](auto response, auto request) {
+        std::stringstream content_stream;
         content_stream << "<h1>Request from " << request->remote_endpoint_address << " (" << request->remote_endpoint_port << ")</h1>";
         content_stream << request->method << " " << request->path << " HTTP/" << request->http_version << "<br>";
         for(auto& header: request->header) {
@@ -72,23 +70,23 @@ int main() {
         }
         
         //find length of content_stream (length received using content_stream.tellp())
-        content_stream.seekp(0, ios::end);
+        content_stream.seekp(0, std::ios::end);
         
         *response <<  "HTTP/1.1 200 OK\r\nContent-Length: " << content_stream.tellp() << "\r\n\r\n" << content_stream.rdbuf();
     };
     
     //GET-example for the path /match/[number], responds with the matched string in path (number)
     //For instance a request GET /match/123 will receive: 123
-    server.resource["^/match/([0-9]+)$"]["GET"]=[&server](shared_ptr<HttpsServer::Response> response, shared_ptr<HttpsServer::Request> request) {
-        string number=request->path_match[1];
+    server.resource["^/match/([0-9]+)$"]["GET"]=[&server](auto response, auto request) {
+        std::string number=request->path_match[1];
         *response << "HTTP/1.1 200 OK\r\nContent-Length: " << number.length() << "\r\n\r\n" << number;
     };
     
     //Get example simulating heavy work in a separate thread
-    server.resource["^/work$"]["GET"]=[&server](shared_ptr<HttpsServer::Response> response, shared_ptr<HttpsServer::Request> /*request*/) {
-        thread work_thread([response] {
-            this_thread::sleep_for(chrono::seconds(5));
-            string message="Work done";
+    server.resource["^/work$"]["GET"]=[&server](auto response, auto /*request*/) {
+        std::thread work_thread([response] {
+            std::this_thread::sleep_for(std::chrono::seconds(5));
+            std::string message="Work done";
             *response << "HTTP/1.1 200 OK\r\nContent-Length: " << message.length() << "\r\n\r\n" << message;
         });
         work_thread.detach();
@@ -98,7 +96,7 @@ int main() {
     //Will respond with content in the web/-directory, and its subdirectories.
     //Default file: index.html
     //Can for instance be used to retrieve an HTML 5 client that uses REST-resources on this server
-//   server.default_resource["GET"]=[&server](shared_ptr<HttpsServer::Response> response, shared_ptr<HttpsServer::Request> request) {
+//   server.default_resource["GET"]=[&server](auto response, auto request) {
 //       try {
 //           auto web_root_path=boost::filesystem::canonical("web");
 //           auto path=boost::filesystem::canonical(web_root_path/request->path);
@@ -131,46 +129,46 @@ int main() {
 //           *response << "HTTP/1.1 400 Bad Request\r\nContent-Length: " << content.length() << "\r\n\r\n" << content;
 //       }
 //   };
-    
-    thread server_thread([&server](){
+
+    std::thread server_thread([&server](){
         //Start server
         server.start();
     });
     
     //Wait for server to start so that the client can connect
-    this_thread::sleep_for(chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::seconds(1));
     
     //Client examples
     //Second Client() parameter set to false: no certificate verification
     HttpsClient client("localhost:8080", false);
     auto r1=client.request("GET", "/match/123");
-    cout << r1->content.rdbuf() << endl;
+    std::cout << r1->content.rdbuf() << std::endl;
 
-    string json_string="{\"firstName\": \"John\",\"lastName\": \"Smith\",\"age\": 25}";
+    std::string json_string="{\"firstName\": \"John\",\"lastName\": \"Smith\",\"age\": 25}";
     auto r2=client.request("POST", "/string", json_string);
-    cout << r2->content.rdbuf() << endl;
+    std::cout << r2->content.rdbuf() << std::endl;
     
     auto r3=client.request("POST", "/json", json_string);
-    cout << r3->content.rdbuf() << endl;
+    std::cout << r3->content.rdbuf() << std::endl;
     
     server_thread.join();
     
     return 0;
 }
 
-void default_resource_send(const HttpsServer &server, const shared_ptr<HttpsServer::Response> &response,
-                           const shared_ptr<ifstream> &ifs) {
+void default_resource_send(const HttpsServer &server, const std::shared_ptr<HttpsServer::Response> &response,
+                           const std::shared_ptr<std::ifstream> &ifs) {
     //read and send 128 KB at a time
-    static vector<char> buffer(131072); // Safe when server is running on one thread
-    streamsize read_length;
+    static std::vector<char> buffer(131072); // Safe when server is running on one thread
+    std::streamsize read_length;
     if((read_length=ifs->read(&buffer[0], buffer.size()).gcount())>0) {
         response->write(&buffer[0], read_length);
-        if(read_length==static_cast<streamsize>(buffer.size())) {
+        if(read_length==static_cast<std::streamsize>(buffer.size())) {
             server.send(response, [&server, response, ifs](const std::error_code &ec) {
                 if(!ec)
                     default_resource_send(server, response, ifs);
                 else
-                    cerr << "Connection interrupted" << endl;
+                    std::cerr << "Connection interrupted" << std::endl;
             });
         }
     }
