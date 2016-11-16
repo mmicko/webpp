@@ -274,7 +274,7 @@ namespace SimpleWeb {
                         }
                         if(content_length>num_additional_bytes) {
                             asio::async_read(*socket, request->streambuf,
-                                    asio::transfer_exactly(content_length-num_additional_bytes),
+                                    asio::transfer_exactly(size_t(content_length)-num_additional_bytes),
                                     [this, socket, request, timer]
                                     (const std::error_code& ec, size_t /*bytes_transferred*/) {
                                 if(timeout_content>0)

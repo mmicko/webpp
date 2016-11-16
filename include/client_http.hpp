@@ -191,7 +191,7 @@ namespace SimpleWeb {
                     auto content_length=stoull(header_it->second);
                     if(content_length>num_additional_bytes) {
                         asio::read(*socket, response->content_buffer, 
-                                asio::transfer_exactly(content_length-num_additional_bytes));
+                                asio::transfer_exactly(size_t(content_length)-num_additional_bytes));
                     }
                 }
                 else if((header_it=response->header.find("Transfer-Encoding"))!=response->header.end() && header_it->second=="chunked") {
@@ -212,7 +212,7 @@ namespace SimpleWeb {
                     
                         if((2+length)>num_additional_bytes) {
                             asio::read(*socket, response->content_buffer, 
-                                asio::transfer_exactly(2+length-num_additional_bytes));
+                                asio::transfer_exactly(size_t(2+length)-size_t(num_additional_bytes)));
                         }
 
                         buffer.resize(static_cast<size_t>(length));
