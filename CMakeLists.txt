@@ -40,7 +40,9 @@ target_link_libraries(ws_examples ${CMAKE_THREAD_LIBS_INIT})
 
 if( MSYS OR MINGW OR MSVC) #TODO: Is MSYS true when MSVC is true?
     target_link_libraries(http_examples ws2_32 wsock32)
-    target_link_libraries(https_examples ws2_32 wsock32)
     target_link_libraries(ws_examples ws2_32 wsock32)
-    target_link_libraries(wss_examples ws2_32 wsock32)
+	if(OPENSSL_FOUND)
+		target_link_libraries(https_examples ws2_32 wsock32)
+		target_link_libraries(wss_examples ws2_32 wsock32)
+	endif()	
 endif()
