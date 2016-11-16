@@ -24,22 +24,28 @@ if( MSYS OR MINGW)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wa,-mbig-obj")
 endif()
 
+set(HTTP_HEADERS  include/asio_wrapper.hpp include/server_http.hpp  include/client_http.hpp )
+set(HTTPS_HEADERS include/asio_wrapper.hpp include/server_https.hpp include/client_https.hpp )
+
+set(WS_HEADERS  include/asio_wrapper.hpp include/sha1.hpp include/crypto.hpp include/base64.hpp include/server_ws.hpp  include/client_ws.hpp  )
+set(WSS_HEADERS include/asio_wrapper.hpp include/sha1.hpp include/crypto.hpp include/base64.hpp include/server_wss.hpp include/client_wss.hpp )
+
 if(OPENSSL_FOUND)
     include_directories(SYSTEM ${OPENSSL_INCLUDE_DIR})
 
-    add_executable(https_examples https_examples.cpp)
+    add_executable(https_examples https_examples.cpp ${HTTPS_HEADERS})
     target_link_libraries(https_examples ${OPENSSL_LIBRARIES})
     target_link_libraries(https_examples ${CMAKE_THREAD_LIBS_INIT})
 
-    add_executable(wss_examples wss_examples.cpp)
+    add_executable(wss_examples wss_examples.cpp ${WSS_HEADERS})
     target_link_libraries(wss_examples ${OPENSSL_LIBRARIES})
     target_link_libraries(wss_examples ${CMAKE_THREAD_LIBS_INIT})
 endif()
 
-add_executable(http_examples http_examples.cpp)
+add_executable(http_examples http_examples.cpp ${HTTP_HEADERS})
 target_link_libraries(http_examples ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(ws_examples ws_examples.cpp)
+add_executable(ws_examples ws_examples.cpp ${WS_HEADERS})
 target_link_libraries(ws_examples ${CMAKE_THREAD_LIBS_INIT})
 
 if( MSYS OR MINGW OR MSVC) #TODO: Is MSYS true when MSVC is true?
