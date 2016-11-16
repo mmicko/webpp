@@ -31,7 +31,7 @@ namespace SimpleWeb {
             Response(const std::shared_ptr<socket_type> &socket): std::ostream(&streambuf), socket(socket) {}
 
         public:
-            size_t size() {
+            size_t size() const {
                 return streambuf.size();
             }
         };
@@ -39,10 +39,10 @@ namespace SimpleWeb {
         class Content : public std::istream {
             friend class ServerBase<socket_type>;
         public:
-            size_t size() {
+            size_t size() const {
                 return streambuf.size();
             }
-            std::string string() {
+            std::string string() const {
                 std::stringstream ss;
                 ss << rdbuf();
                 return ss.str();
@@ -88,7 +88,7 @@ namespace SimpleWeb {
             unsigned short remote_endpoint_port;
             
         private:
-            Request(): content(streambuf) {}
+            Request(): content(streambuf), remote_endpoint_port(0) { }
             
             asio::streambuf streambuf;
         };
@@ -109,6 +109,11 @@ namespace SimpleWeb {
         ///Set before calling start().
         Config config;
         using http_handler = std::function<void(std::shared_ptr<typename ServerBase<socket_type>::Response>, std::shared_ptr<typename ServerBase<socket_type>::Request>)>;
+    	
+		template<class T> void on_get(std::string regex, T&& func) { resource[regex]["GET"] = func; }
+		template<class T> void on_get(T&& func) { default_resource["GET"] = func; }
+		template<class T> void on_post(std::string regex, T&& func) { resource[regex]["POST"] = func; }
+		template<class T> void on_post(T&& func) { default_resource["POST"] = func; }
         
         std::unordered_map<std::string, std::unordered_map<std::string, http_handler>>  resource;
         
@@ -126,7 +131,7 @@ namespace SimpleWeb {
             for(auto& res: resource) {
                 for(auto& res_method: res.second) {
                     auto it=opt_resource.end();
-                    for(auto opt_it=opt_resource.begin();opt_it!=opt_resource.end();opt_it++) {
+                    for(auto opt_it=opt_resource.begin();opt_it!=opt_resource.end();++opt_it) {
                         if(res_method.first==opt_it->first) {
                             it=opt_it;
                             break;
@@ -154,7 +159,7 @@ namespace SimpleWeb {
                 endpoint=asio::ip::tcp::endpoint(asio::ip::tcp::v4(), config.port);
             
             if(!acceptor)
-                acceptor=std::unique_ptr<asio::ip::tcp::acceptor>(new asio::ip::tcp::acceptor(*io_service));
+                acceptor= std::make_unique<asio::ip::tcp::acceptor>(*io_service);
             acceptor->open(endpoint.protocol());
             acceptor->set_option(asio::socket_base::reuse_address(config.reuse_address));
             acceptor->bind(endpoint);
@@ -214,8 +219,8 @@ namespace SimpleWeb {
             timer->expires_from_now(std::chrono::seconds(seconds));
             timer->async_wait([socket](const std::error_code& ec){
                 if(!ec) {
-                    std::error_code ec;
-                    socket->lowest_layer().shutdown(asio::ip::tcp::socket::shutdown_both, ec);
+					std::error_code newec = ec;
+                    socket->lowest_layer().shutdown(asio::ip::tcp::socket::shutdown_both, newec);
                     socket->lowest_layer().close();
                 }
             });
@@ -258,9 +263,9 @@ namespace SimpleWeb {
                     auto it=request->header.find("Content-Length");
                     if(it!=request->header.end()) {
                         //Set timeout on the following asio::async-read or write function
-                        std::shared_ptr<asio::system_timer> timer;
+                        std::shared_ptr<asio::system_timer> timer2;
                         if(timeout_content>0)
-                            timer=set_timeout_on_socket(socket, timeout_content);
+                            timer2=set_timeout_on_socket(socket, timeout_content);
                         unsigned long long content_length;
                         try {
                             content_length=stoull(it->second);
@@ -273,17 +278,17 @@ namespace SimpleWeb {
                         if(content_length>num_additional_bytes) {
                             asio::async_read(*socket, request->streambuf,
                                     asio::transfer_exactly(size_t(content_length)-num_additional_bytes),
-                                    [this, socket, request, timer]
+                                    [this, socket, request, timer2]
                                     (const std::error_code& ec, size_t /*bytes_transferred*/) {
                                 if(timeout_content>0)
-                                    timer->cancel();
+                                    timer2->cancel();
                                 if(!ec)
                                     find_resource(socket, request);
                             });
                         }
                         else {
                             if(timeout_content>0)
-                                timer->cancel();
+                                timer2->cancel();
                             find_resource(socket, request);
                         }
                     }
@@ -386,7 +391,7 @@ namespace SimpleWeb {
                         }
                         
                         auto range=request->header.equal_range("Connection");
-                        for(auto it=range.first;it!=range.second;it++) {
+                        for(auto it=range.first;it!=range.second; ++it) {
                             if(iequals(it->second, "close"))
                                 return;
                         }
@@ -408,18 +413,24 @@ namespace SimpleWeb {
     };
     
     template<class socket_type>
-    class Server : public ServerBase<socket_type> {};
+    class Server : public ServerBase<socket_type> {
+    public:
+	    Server(unsigned short port, size_t num_threads, long timeout_request, long timeout_send_or_receive)
+		    : ServerBase<socket_type>(port, num_threads, timeout_request, timeout_send_or_receive)
+	    {
+	    }
+    };
     
     typedef asio::ip::tcp::socket HTTP;
     
     template<>
     class Server<HTTP> : public ServerBase<HTTP> {
     public:
-        Server(unsigned short port, size_t num_threads=1, long timeout_request=5, long timeout_content=300) :
+	    explicit Server(unsigned short port, size_t num_threads=1, long timeout_request=5, long timeout_content=300) :
                 ServerBase<HTTP>::ServerBase(port, num_threads, timeout_request, timeout_content) {}
         
     protected:
-        void accept() {
+        void accept() override {
             //Create new socket for this connection
             //Shared_ptr is used to pass temporary objects to the asynchronous functions
             std::shared_ptr<HTTP> socket(new HTTP(*io_service));

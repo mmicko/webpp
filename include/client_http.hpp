@@ -201,18 +201,18 @@ namespace SimpleWeb {
                     std::streamsize length;
                     std::string buffer;
                     do {
-                        size_t bytes_transferred = asio::read_until(*socket, response->content_buffer, "\r\n");
+                        size_t bytes_transferred2 = asio::read_until(*socket, response->content_buffer, "\r\n");
                         std::string line;
                         getline(response->content, line);
-                        bytes_transferred-=line.size()+1;
+                        bytes_transferred2-=line.size()+1;
                         line.pop_back();
-                        length=stol(line, 0, 16);
+                        length=stol(line, nullptr, 16);
             
-                        auto num_additional_bytes=static_cast<std::streamsize>(response->content_buffer.size()-bytes_transferred);
+                        auto num_additional_bytes2=static_cast<std::streamsize>(response->content_buffer.size()-bytes_transferred2);
                     
-                        if((2+length)>num_additional_bytes) {
+                        if((2+length)>num_additional_bytes2) {
                             asio::read(*socket, response->content_buffer, 
-                                asio::transfer_exactly(size_t(2+length)-size_t(num_additional_bytes)));
+                                asio::transfer_exactly(size_t(2+length)-size_t(num_additional_bytes2)));
                         }
 
                         buffer.resize(static_cast<size_t>(length));
@@ -238,7 +238,13 @@ namespace SimpleWeb {
     };
     
     template<class socket_type>
-    class Client : public ClientBase<socket_type> {};
+    class Client : public ClientBase<socket_type> {
+    public:
+	    Client(const std::string& host_port, unsigned short default_port)
+		    : ClientBase<socket_type>(host_port, default_port)
+	    {
+	    }
+    };
     
     typedef asio::ip::tcp::socket HTTP;
     
@@ -250,7 +256,7 @@ namespace SimpleWeb {
         }
         
     protected:
-        void connect() {
+        void connect() override {
             if(socket_error || !socket->is_open()) {
                 asio::ip::tcp::resolver::query query(host, std::to_string(port));
                 asio::connect(*socket, resolver.resolve(query));

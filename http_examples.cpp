@@ -55,7 +55,7 @@ int main() {
 
     //GET-example for the path /info
     //Responds with request-information
-    server.resource["^/info$"]["GET"]=[](auto response, auto request) {
+    server.on_get("^/info$", [](auto response, auto request) {
 		std::stringstream content_stream;
         content_stream << "<h1>Request from " << request->remote_endpoint_address << " (" << request->remote_endpoint_port << ")</h1>";
         content_stream << request->method << " " << request->path << " HTTP/" << request->http_version << "<br>";
@@ -67,7 +67,7 @@ int main() {
         content_stream.seekp(0, std::ios::end);
         
         *response <<  "HTTP/1.1 200 OK\r\nContent-Length: " << content_stream.tellp() << "\r\n\r\n" << content_stream.rdbuf();
-    };
+    });
     
     //GET-example for the path /match/[number], responds with the matched string in path (number)
     //For instance a request GET /match/123 will receive: 123

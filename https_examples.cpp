@@ -5,7 +5,6 @@
 //Added for the default_resource example
 #include <fstream>
 #include <vector>
-#include <algorithm>
 
 using HttpsServer = SimpleWeb::Server<SimpleWeb::HTTPS>;
 using HttpsClient = SimpleWeb::Client<SimpleWeb::HTTPS>;

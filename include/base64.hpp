@@ -56,7 +56,7 @@ static inline bool is_base64(unsigned char c) {
 inline std::string base64_encode(unsigned char const * input, size_t len) {
     std::string ret;
     int i = 0;
-    int j = 0;
+    int j;
     unsigned char char_array_3[3];
     unsigned char char_array_4[4];
 
@@ -121,7 +121,7 @@ inline std::string base64_encode(std::string const & input) {
 inline std::string base64_decode(std::string const & input) {
     size_t in_len = input.size();
     int i = 0;
-    int j = 0;
+    int j;
     int in_ = 0;
     unsigned char char_array_4[4], char_array_3[3];
     std::string ret;

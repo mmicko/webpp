@@ -25,7 +25,7 @@ namespace SimpleWeb {
             asio::streambuf streambuf;
         public:
             SendStream(): std::iostream(&streambuf) {}
-            size_t size() {
+            size_t size() const {
                 return streambuf.size();
             }
         };
@@ -40,8 +40,8 @@ namespace SimpleWeb {
             unsigned short remote_endpoint_port;
             
         private:
-            Connection(socket_type* socket): socket(socket), strand(socket->get_io_service()), closed(false) {}
-            
+	        explicit Connection(socket_type* socket): remote_endpoint_port(0), socket(socket), strand(socket->get_io_service()), closed(false) { }
+
             class SendData {
             public:
                 SendData(const std::shared_ptr<SendStream> &send_stream, const std::function<void(const std::error_code)> &callback) :
@@ -94,16 +94,17 @@ namespace SimpleWeb {
             
         public:
             unsigned char fin_rsv_opcode;
-            size_t size() {
+            size_t size() const {
                 return length;
             }
-            std::string string() {
+            std::string string() const {
                 std::stringstream ss;
                 ss << rdbuf();
                 return ss.str();
             }
         private:
-            Message(): std::istream(&streambuf) {}
+            Message(): std::istream(&streambuf), fin_rsv_opcode(0), length(0) { }
+
             size_t length;
             asio::streambuf streambuf;
         };
@@ -123,7 +124,7 @@ namespace SimpleWeb {
                 io_service->reset();
             
             if(!resolver)
-                resolver=std::unique_ptr<asio::ip::tcp::resolver>(new asio::ip::tcp::resolver(*io_service));
+                resolver= std::make_unique<asio::ip::tcp::resolver>(*io_service);
             
             connect();
             
@@ -131,7 +132,7 @@ namespace SimpleWeb {
                 io_service->run();
         }
         
-        void stop() {
+        void stop() const {
             resolver->cancel();
             if(internal_io_service)
                 io_service->stop();
@@ -228,9 +229,9 @@ namespace SimpleWeb {
             }
             else {
                 if(host_port_end==std::string::npos)
-                    port=(unsigned short)stoul(host_port_path.substr(host_end+1));
+                    port=static_cast<unsigned short>(stoul(host_port_path.substr(host_end + 1)));
                 else
-                    port=(unsigned short)stoul(host_port_path.substr(host_end+1, host_port_end-(host_end+1)));
+                    port=static_cast<unsigned short>(stoul(host_port_path.substr(host_end + 1, host_port_end - (host_end + 1))));
             }
             if(host_port_end==std::string::npos) {
                 path="/";
@@ -330,7 +331,7 @@ namespace SimpleWeb {
                     }
                     std::vector<unsigned char> first_bytes;
                     first_bytes.resize(2);
-                    message->read((char*)&first_bytes[0], 2);
+                    message->read(reinterpret_cast<char*>(&first_bytes[0]), 2);
                     
                     message->fin_rsv_opcode=first_bytes[0];
                     
@@ -354,7 +355,7 @@ namespace SimpleWeb {
                             if(!ec) {
                                 std::vector<unsigned char> length_bytes;
                                 length_bytes.resize(2);
-                                message->read((char*)&length_bytes[0], 2);
+                                message->read(reinterpret_cast<char*>(&length_bytes[0]), 2);
                                 
                                 size_t length=0;
                                 int num_bytes=2;
@@ -378,7 +379,7 @@ namespace SimpleWeb {
                             if(!ec) {
                                 std::vector<unsigned char> length_bytes;
                                 length_bytes.resize(8);
-                                message->read((char*)&length_bytes[0], 8);
+                                message->read(reinterpret_cast<char*>(&length_bytes[0]), 8);
                                 
                                 size_t length=0;
                                 int num_bytes=8;
@@ -450,7 +451,13 @@ namespace SimpleWeb {
     };
     
     template<class socket_type>
-    class SocketClient : public SocketClientBase<socket_type> {};
+    class SocketClient : public SocketClientBase<socket_type> {
+    public:
+	    SocketClient(const std::string& host_port_path, unsigned short default_port)
+		    : SocketClientBase<socket_type>(host_port_path, default_port)
+	    {
+	    }
+    };
     
     typedef asio::ip::tcp::socket WS;
     
@@ -460,7 +467,7 @@ namespace SimpleWeb {
         SocketClient(const std::string& server_port_path) : SocketClientBase<WS>::SocketClientBase(server_port_path, 80) {};
         
     protected:
-        void connect() {
+        void connect() override {
             asio::ip::tcp::resolver::query query(host, std::to_string(port));
             
             resolver->async_resolve(query, [this]

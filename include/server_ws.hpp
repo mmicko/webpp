@@ -33,7 +33,7 @@ namespace SimpleWeb {
             asio::streambuf streambuf;
         public:
             SendStream(): std::ostream(&streambuf) {}
-            size_t size() {
+            size_t size() const {
                 return streambuf.size();
             }
         };
@@ -53,8 +53,8 @@ namespace SimpleWeb {
             unsigned short remote_endpoint_port;
             
         private:
-            Connection(socket_type *socket): socket(socket), strand(socket->get_io_service()), closed(false) {}
-            
+            Connection(socket_type *socket): remote_endpoint_port(0), socket(socket), strand(socket->get_io_service()), closed(false) { }
+
             class SendData {
             public:
                 SendData(const std::shared_ptr<SendStream> &header_stream, const std::shared_ptr<SendStream> &message_stream,
@@ -122,16 +122,17 @@ namespace SimpleWeb {
             
         public:
             unsigned char fin_rsv_opcode;
-            size_t size() {
+            size_t size() const {
                 return length;
             }
-            std::string string() {
+            std::string string() const {
                 std::stringstream ss;
                 ss << rdbuf();
                 return ss.str();
             }
         private:
-            Message(): std::istream(&streambuf) {}
+            Message(): std::istream(&streambuf), fin_rsv_opcode(0), length(0) {}
+
             size_t length;
             asio::streambuf streambuf;
         };
@@ -197,7 +198,7 @@ namespace SimpleWeb {
                 endpoint=asio::ip::tcp::endpoint(asio::ip::tcp::v4(), config.port);
             
             if(!acceptor)
-                acceptor=std::unique_ptr<asio::ip::tcp::acceptor>(new asio::ip::tcp::acceptor(*io_service));
+                acceptor= std::make_unique<asio::ip::tcp::acceptor>(*io_service);
             acceptor->open(endpoint.protocol());
             acceptor->set_option(asio::socket_base::reuse_address(config.reuse_address));
             acceptor->bind(endpoint);
@@ -417,7 +418,7 @@ namespace SimpleWeb {
         
         bool generate_handshake(const std::shared_ptr<Connection> &connection, std::ostream& handshake) const {
             if(connection->header.count("Sec-WebSocket-Key")==0)
-                return 0;
+                return false;
             
             auto sha1=sha1_encode(connection->header["Sec-WebSocket-Key"]+ws_magic_string);
 
@@ -427,7 +428,7 @@ namespace SimpleWeb {
             handshake << "Sec-WebSocket-Accept: " << base64_encode(sha1) << "\r\n";
             handshake << "\r\n";
             
-            return 1;
+            return true;
         }
         
         void read_message(const std::shared_ptr<Connection> &connection,
@@ -444,7 +445,7 @@ namespace SimpleWeb {
 
                     std::vector<unsigned char> first_bytes;
                     first_bytes.resize(2);
-                    stream.read((char*)&first_bytes[0], 2);
+                    stream.read(reinterpret_cast<char*>(&first_bytes[0]), 2);
                     
                     unsigned char fin_rsv_opcode=first_bytes[0];
                     
@@ -468,7 +469,7 @@ namespace SimpleWeb {
                                 
                                 std::vector<unsigned char> length_bytes;
                                 length_bytes.resize(2);
-                                stream.read((char*)&length_bytes[0], 2);
+                                stream.read(reinterpret_cast<char*>(&length_bytes[0]), 2);
                                 
                                 size_t length=0;
                                 int num_bytes=2;
@@ -491,7 +492,7 @@ namespace SimpleWeb {
                                 
                                 std::vector<unsigned char> length_bytes;
                                 length_bytes.resize(8);
-                                stream.read((char*)&length_bytes[0], 8);
+                                stream.read(reinterpret_cast<char*>(&length_bytes[0]), 8);
                                 
                                 size_t length=0;
                                 int num_bytes=8;
@@ -523,7 +524,7 @@ namespace SimpleWeb {
                     //Read mask
                     std::vector<unsigned char> mask;
                     mask.resize(4);
-                    raw_message_data.read((char*)&mask[0], 4);
+                    raw_message_data.read(reinterpret_cast<char*>(&mask[0]), 4);
                     
                     std::shared_ptr<Message> message(new Message());
                     message->length=length;
@@ -606,7 +607,7 @@ namespace SimpleWeb {
         
         void timer_idle_init(const std::shared_ptr<Connection> &connection) {
             if(timeout_idle>0) {
-                connection->timer_idle=std::unique_ptr<asio::system_timer>(new asio::system_timer(*io_service));
+                connection->timer_idle= std::make_unique<asio::system_timer>(*io_service);
                 connection->timer_idle->expires_from_now(std::chrono::seconds(static_cast<unsigned long>(timeout_idle)));
                 timer_idle_expired_function(connection);
             }
@@ -632,7 +633,13 @@ namespace SimpleWeb {
     };
     
     template<class socket_type>
-    class SocketServer : public SocketServerBase<socket_type> {};
+    class SocketServer : public SocketServerBase<socket_type> {
+    public:
+	    SocketServer(unsigned short port, size_t num_threads, size_t timeout_request, size_t timeout_idle)
+		    : SocketServerBase<socket_type>(port, num_threads, timeout_request, timeout_idle)
+	    {
+	    }
+    };
     
     typedef asio::ip::tcp::socket WS;
     
@@ -643,7 +650,7 @@ namespace SimpleWeb {
                 SocketServerBase<WS>::SocketServerBase(port, num_threads, timeout_request, timeout_idle) {};
         
     protected:
-        void accept() {
+        void accept() override {
             //Create new socket for this connection (stored in Connection::socket)
             //Shared_ptr is used to pass temporary objects to the asynchronous functions
             std::shared_ptr<Connection> connection(new Connection(new WS(*io_service)));

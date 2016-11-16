@@ -35,7 +35,7 @@ namespace SimpleWeb {
     protected:
         asio::ssl::context context;
         
-        void connect() {
+        void connect() override {
             if(socket_error || !socket->lowest_layer().is_open()) {
                 asio::ip::tcp::resolver::query query(host, std::to_string(port));
                 asio::connect(socket->lowest_layer(), resolver.resolve(query));

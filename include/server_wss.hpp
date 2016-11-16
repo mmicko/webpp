@@ -26,7 +26,7 @@ namespace SimpleWeb {
     protected:
         asio::ssl::context context;
         
-        void accept() {
+        void accept() override {
             //Create new socket for this connection (stored in Connection::socket)
             //Shared_ptr is used to pass temporary objects to the asynchronous functions
             std::shared_ptr<Connection> connection(new Connection(new WSS(*io_service, context)));

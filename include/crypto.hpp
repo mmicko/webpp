@@ -7,7 +7,7 @@
 inline std::string sha1_encode(const std::string& input) 
 {
 	char message_digest[20];
-    sha1::calc(input.c_str(),input.length(),(unsigned char*)message_digest);
+    sha1::calc(input.c_str(),input.length(),reinterpret_cast<unsigned char*>(message_digest));
 
 	return std::string(message_digest, sizeof(message_digest));
 

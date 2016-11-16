@@ -121,7 +121,7 @@ inline void calc(void const * src, size_t bytelength, unsigned char * hash) {
                                0x10325476, 0xc3d2e1f0 };
 
     // Cast the void src pointer to be the byte array we can work with.
-    unsigned char const * sarray = (unsigned char const *) src;
+    unsigned char const * sarray = static_cast<unsigned char const *>(src);
 
     // The reusable round buffer
     unsigned int w[80];
@@ -142,10 +142,10 @@ inline void calc(void const * src, size_t bytelength, unsigned char * hash) {
             {
                 // This line will swap endian on big endian and keep endian on
                 // little endian.
-                w[roundPos++] = (unsigned int) sarray[currentBlock + 3]
-                        | (((unsigned int) sarray[currentBlock + 2]) << 8)
-                        | (((unsigned int) sarray[currentBlock + 1]) << 16)
-                        | (((unsigned int) sarray[currentBlock]) << 24);
+                w[roundPos++] = static_cast<unsigned int>(sarray[currentBlock + 3])
+                        | (static_cast<unsigned int>(sarray[currentBlock + 2]) << 8)
+                        | (static_cast<unsigned int>(sarray[currentBlock + 1]) << 16)
+                        | (static_cast<unsigned int>(sarray[currentBlock]) << 24);
             }
             innerHash(result, w);
         }
@@ -156,7 +156,7 @@ inline void calc(void const * src, size_t bytelength, unsigned char * hash) {
     clearWBuffert(w);
     size_t lastBlockBytes = 0;
     for (;lastBlockBytes < endCurrentBlock; ++lastBlockBytes) {
-        w[lastBlockBytes >> 2] |= (unsigned int) sarray[lastBlockBytes + currentBlock] << ((3 - (lastBlockBytes & 3)) << 3);
+        w[lastBlockBytes >> 2] |= static_cast<unsigned int>(sarray[lastBlockBytes + currentBlock]) << ((3 - (lastBlockBytes & 3)) << 3);
     }
 
     w[lastBlockBytes >> 2] |= 0x80 << ((3 - (lastBlockBytes & 3)) << 3);
