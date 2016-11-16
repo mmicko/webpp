@@ -115,13 +115,13 @@ namespace SimpleWeb {
 		template<class T> void on_post(std::string regex, T&& func) { resource[regex]["POST"] = func; }
 		template<class T> void on_post(T&& func) { default_resource["POST"] = func; }
         
-        std::unordered_map<std::string, std::unordered_map<std::string, http_handler>>  resource;
+	private:
+		std::unordered_map<std::string, std::unordered_map<std::string, http_handler>>  resource;
         
         std::unordered_map<std::string, http_handler> default_resource;
         
         std::function<void(const std::exception&)> exception_handler;
 
-    private:
         std::vector<std::pair<std::string, std::vector<std::pair<std::regex,http_handler>>>> opt_resource;
         
     public:
