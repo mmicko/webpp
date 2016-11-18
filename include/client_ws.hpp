@@ -250,7 +250,7 @@ namespace SimpleWeb {
         void handshake() {
             connection->read_remote_endpoint_data();
             
-            std::shared_ptr<asio::streambuf> write_buffer(new asio::streambuf);
+            std::shared_ptr<asio::streambuf> write_buffer = std::make_shared<asio::streambuf>();
             
             std::ostream request(write_buffer.get());
             
@@ -273,7 +273,7 @@ namespace SimpleWeb {
             request << "\r\n";
             
             //test this to base64::decode(Sec-WebSocket-Accept)
-            std::shared_ptr<std::string> accept_sha1(new std::string(sha1_encode(nonce_base64+ws_magic_string)));
+            std::shared_ptr<std::string> accept_sha1 = std::make_shared<std::string>(sha1_encode(nonce_base64 + ws_magic_string));
             
             asio::async_write(*connection->socket, *write_buffer, 
                     [this, write_buffer, accept_sha1]

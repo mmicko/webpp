@@ -29,7 +29,7 @@ namespace SimpleWeb {
         
         class SendStream : public std::ostream {
             friend class SocketServerBase<socket_type>;
-        private:
+
             asio::streambuf streambuf;
         public:
             SendStream(): std::ostream(&streambuf) {}
@@ -159,7 +159,7 @@ namespace SimpleWeb {
         
         class Config {
             friend class SocketServerBase<socket_type>;
-        private:
+
             Config(unsigned short port, size_t num_threads): num_threads(num_threads), port(port), reuse_address(true) {}
             size_t num_threads;
         public:
@@ -240,7 +240,7 @@ namespace SimpleWeb {
             if(fin_rsv_opcode!=136)
                 timer_idle_reset(connection);
             
-            auto header_stream=std::make_shared<SendStream>();
+            auto header_stream = std::make_shared<SendStream>();
 
             size_t length=message_stream->size();
 
@@ -335,7 +335,7 @@ namespace SimpleWeb {
             
             //Create new read_buffer for async_read_until()
             //Shared_ptr is used to pass temporary objects to the asynchronous functions
-            std::shared_ptr<asio::streambuf> read_buffer(new asio::streambuf);
+            std::shared_ptr<asio::streambuf> read_buffer = std::make_shared<asio::streambuf>();
 
             //Set timeout on the following asio::async-read or write function
             std::shared_ptr<asio::system_timer> timer;

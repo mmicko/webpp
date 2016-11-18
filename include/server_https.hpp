@@ -28,7 +28,7 @@ namespace SimpleWeb {
         void accept() override {
             //Create new socket for this connection
             //Shared_ptr is used to pass temporary objects to the asynchronous functions
-            std::shared_ptr<HTTPS> socket(new HTTPS(*io_service, context));
+            std::shared_ptr<HTTPS> socket = std::make_shared<HTTPS>(*io_service, context);
 
             acceptor->async_accept((*socket).lowest_layer(), [this, socket](const std::error_code& ec) {
                 //Immediately start accepting a new connection (if io_service hasn't been stopped)

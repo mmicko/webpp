@@ -215,7 +215,7 @@ namespace SimpleWeb {
         virtual void accept()=0;
         
         std::shared_ptr<asio::system_timer> set_timeout_on_socket(const std::shared_ptr<socket_type> &socket, long seconds) {
-            std::shared_ptr<asio::system_timer> timer(new asio::system_timer(*io_service));
+            std::shared_ptr<asio::system_timer> timer = std::make_shared<asio::system_timer>(*io_service);
             timer->expires_from_now(std::chrono::seconds(seconds));
             timer->async_wait([socket](const std::error_code& ec){
                 if(!ec) {
@@ -433,7 +433,7 @@ namespace SimpleWeb {
         void accept() override {
             //Create new socket for this connection
             //Shared_ptr is used to pass temporary objects to the asynchronous functions
-            std::shared_ptr<HTTP> socket(new HTTP(*io_service));
+            std::shared_ptr<HTTP> socket = std::make_shared<HTTP>(*io_service);
                         
             acceptor->async_accept(*socket, [this, socket](const std::error_code& ec){
                 //Immediately start accepting a new connection (if io_service hasn't been stopped)
