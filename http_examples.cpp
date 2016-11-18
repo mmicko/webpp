@@ -4,12 +4,8 @@
 #include <fstream>
 #include <vector>
 
-using HttpServer = SimpleWeb::Server<SimpleWeb::HTTP>;
-using HttpClient = SimpleWeb::Client<SimpleWeb::HTTP>;
-
-//Added for the default_resource example
-void default_resource_send(const HttpServer &server, const std::shared_ptr<HttpServer::Response> &response,
-                           const std::shared_ptr<std::ifstream> &ifs);
+using HttpServer = webpp::Server<webpp::HTTP>;
+using HttpClient = webpp::Client<webpp::HTTP>;
 
 int main() {
     //HTTP-server at port 8080 using 1 thread
@@ -149,22 +145,4 @@ int main() {
     server_thread.join();
     
     return 0;
-}
-
-void default_resource_send(const HttpServer &server, const std::shared_ptr<HttpServer::Response> &response,
-                           const std::shared_ptr<std::ifstream> &ifs) {
-    //read and send 128 KB at a time
-    static std::vector<char> buffer(131072); // Safe when server is running on one thread
-	std::streamsize read_length;
-    if((read_length=ifs->read(&buffer[0], buffer.size()).gcount())>0) {
-        response->write(&buffer[0], read_length);
-        if(read_length==static_cast<std::streamsize>(buffer.size())) {
-            server.send(response, [&server, response, ifs](const std::error_code &ec) {
-                if(!ec)
-                    default_resource_send(server, response, ifs);
-                else
-					std::cerr << "Connection interrupted" << std::endl;
-            });
-        }
-    }
 }

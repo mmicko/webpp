@@ -11,7 +11,7 @@
 #include <map>
 #include <random>
 
-namespace SimpleWeb {
+namespace webpp {
     template <class socket_type>
     class ClientBase {
     public:
@@ -32,7 +32,7 @@ namespace SimpleWeb {
             class ihash {
             public:
               size_t operator()(const std::string &key) const {
-                std::size_t seed=0;
+                size_t seed=0;
                 for(auto &c: key) {
 				  std::hash<char> hasher;
 				  seed ^= hasher(std::tolower(c)) + 0x9e3779b9 + (seed<<6) + (seed>>2);
@@ -245,13 +245,13 @@ namespace SimpleWeb {
 	    {
 	    }
     };
-    
-    typedef asio::ip::tcp::socket HTTP;
+
+	using HTTP = asio::ip::tcp::socket;
     
     template<>
     class Client<HTTP> : public ClientBase<HTTP> {
     public:
-        Client(const std::string& server_port_path) : ClientBase<HTTP>::ClientBase(server_port_path, 80) {
+	    explicit Client(const std::string& server_port_path) : ClientBase(server_port_path, 80) {
             socket=std::make_shared<HTTP>(io_service);
         }
         

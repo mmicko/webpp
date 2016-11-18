@@ -1,8 +1,8 @@
 #include "server_wss.hpp"
 #include "client_wss.hpp"
 
-using WssServer = SimpleWeb::SocketServer<SimpleWeb::WSS>;
-using WssClient = SimpleWeb::SocketClient<SimpleWeb::WSS>;
+using WssServer = webpp::SocketServer<webpp::WSS>;
+using WssClient = webpp::SocketClient<webpp::WSS>;
 
 int main() {
     //WebSocket Secure (WSS)-server at port 8080 using 1 thread
@@ -23,9 +23,9 @@ int main() {
         //auto message_str = data_ss.str();
         auto message_str=message->string();
         
-        std::cout << "Server: Message received: \"" << message_str << "\" from " << (size_t)connection.get() << std::endl;
+        std::cout << "Server: Message received: \"" << message_str << "\" from " << size_t(connection.get()) << std::endl;
 
-        std::cout << "Server: Sending message \"" << message_str <<  "\" to " << (size_t)connection.get() << std::endl;
+        std::cout << "Server: Sending message \"" << message_str <<  "\" to " << size_t(connection.get()) << std::endl;
         
         auto send_stream = std::make_shared<WssServer::SendStream>();
         *send_stream << message_str;
@@ -40,17 +40,17 @@ int main() {
     };
     
     echo.onopen=[](auto connection) {
-        std::cout << "Server: Opened connection " << (size_t)connection.get() << std::endl;
+        std::cout << "Server: Opened connection " << size_t(connection.get()) << std::endl;
     };
     
     //See RFC 6455 7.4.1. for status codes
     echo.onclose=[](auto connection, int status, const std::string& /*reason*/) {
-        std::cout << "Server: Closed connection " << (size_t)connection.get() << " with status code " << status << std::endl;
+        std::cout << "Server: Closed connection " << size_t(connection.get()) << " with status code " << status << std::endl;
     };
     
     //See http://www.boost.org/doc/libs/1_55_0/doc/html/boost_asio/reference.html, Error Codes for error code meanings
     echo.onerror=[](auto connection, const std::error_code& ec) {
-        std::cout << "Server: Error in connection " << (size_t)connection.get() << ". " <<
+        std::cout << "Server: Error in connection " << size_t(connection.get()) << ". " <<
                 "Error: " << ec << ", error message: " << ec.message() << std::endl;
     };
     

@@ -4,36 +4,36 @@
 #include "client_http.hpp"
 #include "asio/ssl.hpp"
 
-namespace SimpleWeb {
-    typedef asio::ssl::stream<asio::ip::tcp::socket> HTTPS;
+namespace webpp {
+	using HTTPS = asio::ssl::stream<asio::ip::tcp::socket>;
     
     template<>
     class Client<HTTPS> : public ClientBase<HTTPS> {
     public:
-        Client(const std::string& server_port_path, bool verify_certificate=true, 
+	    explicit Client(const std::string& server_port_path, bool verify_certificate=true, 
                 const std::string& cert_file=std::string(), const std::string& private_key_file=std::string(), 
                 const std::string& verify_file=std::string()) : 
-                ClientBase<HTTPS>::ClientBase(server_port_path, 443), context(asio::ssl::context::tlsv12) {
+                ClientBase(server_port_path, 443), m_context(asio::ssl::context::tlsv12) {
             if(verify_certificate) {
-                context.set_verify_mode(asio::ssl::verify_peer);
-                context.set_default_verify_paths();
+                m_context.set_verify_mode(asio::ssl::verify_peer);
+                m_context.set_default_verify_paths();
             }
             else
-                context.set_verify_mode(asio::ssl::verify_none);
+                m_context.set_verify_mode(asio::ssl::verify_none);
             
             if(cert_file.size()>0 && private_key_file.size()>0) {
-                context.use_certificate_chain_file(cert_file);
-                context.use_private_key_file(private_key_file, asio::ssl::context::pem);
+                m_context.use_certificate_chain_file(cert_file);
+                m_context.use_private_key_file(private_key_file, asio::ssl::context::pem);
             }
             
             if(verify_file.size()>0)
-                context.load_verify_file(verify_file);
+                m_context.load_verify_file(verify_file);
             
-            socket=std::make_shared<HTTPS>(io_service, context);
+            socket=std::make_shared<HTTPS>(io_service, m_context);
         }
 
     protected:
-        asio::ssl::context context;
+        asio::ssl::context m_context;
         
         void connect() override {
             if(socket_error || !socket->lowest_layer().is_open()) {

@@ -15,7 +15,7 @@
 #include <sstream>
 #include <regex>
 
-namespace SimpleWeb {
+namespace webpp {
     template <class socket_type>
     class ServerBase {
     public:
@@ -28,7 +28,7 @@ namespace SimpleWeb {
 
             std::shared_ptr<socket_type> socket;
 
-            Response(const std::shared_ptr<socket_type> &socket): std::ostream(&streambuf), socket(socket) {}
+	        explicit Response(const std::shared_ptr<socket_type> &socket): std::ostream(&streambuf), socket(socket) {}
 
         public:
             size_t size() const {
@@ -49,7 +49,7 @@ namespace SimpleWeb {
             }
         private:
             asio::streambuf &streambuf;
-            Content(asio::streambuf &streambuf): std::istream(&streambuf), streambuf(streambuf) {}
+	        explicit Content(asio::streambuf &streambuf): std::istream(&streambuf), streambuf(streambuf) {}
         };
         
         class Request {
@@ -67,7 +67,7 @@ namespace SimpleWeb {
             class ihash {
             public:
               size_t operator()(const std::string &key) const {
-                std::size_t seed=0;
+                size_t seed=0;
                 for(auto &c: key) {
 				  std::hash<char> hasher;
 				  seed ^= hasher(std::tolower(c)) + 0x9e3779b9 + (seed<<6) + (seed>>2);
@@ -107,39 +107,39 @@ namespace SimpleWeb {
             bool reuse_address;
         };
         ///Set before calling start().
-        Config config;
-        using http_handler = std::function<void(std::shared_ptr<typename ServerBase<socket_type>::Response>, std::shared_ptr<typename ServerBase<socket_type>::Request>)>;
+        Config m_config;
+        using http_handler = std::function<void(std::shared_ptr<Response>, std::shared_ptr<Request>)>;
     	
-		template<class T> void on_get(std::string regex, T&& func) { resource[regex]["GET"] = func; }
-		template<class T> void on_get(T&& func) { default_resource["GET"] = func; }
-		template<class T> void on_post(std::string regex, T&& func) { resource[regex]["POST"] = func; }
-		template<class T> void on_post(T&& func) { default_resource["POST"] = func; }
+		template<class T> void on_get(std::string regex, T&& func) { m_resource[regex]["GET"] = func; }
+		template<class T> void on_get(T&& func) { m_default_resource["GET"] = func; }
+		template<class T> void on_post(std::string regex, T&& func) { m_resource[regex]["POST"] = func; }
+		template<class T> void on_post(T&& func) { m_default_resource["POST"] = func; }
         
 	private:
-		std::unordered_map<std::string, std::unordered_map<std::string, http_handler>>  resource;
+		std::unordered_map<std::string, std::unordered_map<std::string, http_handler>>  m_resource;
         
-        std::unordered_map<std::string, http_handler> default_resource;
+        std::unordered_map<std::string, http_handler> m_default_resource;
         
-        std::function<void(const std::exception&)> exception_handler;
+        std::function<void(const std::exception&)> m_exception_handler;
 
-        std::vector<std::pair<std::string, std::vector<std::pair<std::regex,http_handler>>>> opt_resource;
+        std::vector<std::pair<std::string, std::vector<std::pair<std::regex,http_handler>>>> m_opt_resource;
         
     public:
         void start() {
             //Copy the resources to opt_resource for more efficient request processing
-            opt_resource.clear();
-            for(auto& res: resource) {
+            m_opt_resource.clear();
+            for(auto& res: m_resource) {
                 for(auto& res_method: res.second) {
-                    auto it=opt_resource.end();
-                    for(auto opt_it=opt_resource.begin();opt_it!=opt_resource.end();++opt_it) {
+                    auto it=m_opt_resource.end();
+                    for(auto opt_it=m_opt_resource.begin();opt_it!=m_opt_resource.end();++opt_it) {
                         if(res_method.first==opt_it->first) {
                             it=opt_it;
                             break;
                         }
                     }
-                    if(it==opt_resource.end()) {
-                        opt_resource.emplace_back();
-                        it=opt_resource.begin()+(opt_resource.size()-1);
+                    if(it==m_opt_resource.end()) {
+                        m_opt_resource.emplace_back();
+                        it=m_opt_resource.begin()+(m_opt_resource.size()-1);
                         it->first=res_method.first;
                     }
                     it->second.emplace_back(std::regex(res.first), res_method.second);
@@ -153,15 +153,15 @@ namespace SimpleWeb {
                 io_service->reset();
 
             asio::ip::tcp::endpoint endpoint;
-            if(config.address.size()>0)
-                endpoint=asio::ip::tcp::endpoint(asio::ip::address::from_string(config.address), config.port);
+            if(m_config.address.size()>0)
+                endpoint=asio::ip::tcp::endpoint(asio::ip::address::from_string(m_config.address), m_config.port);
             else
-                endpoint=asio::ip::tcp::endpoint(asio::ip::tcp::v4(), config.port);
+                endpoint=asio::ip::tcp::endpoint(asio::ip::tcp::v4(), m_config.port);
             
             if(!acceptor)
                 acceptor= std::make_unique<asio::ip::tcp::acceptor>(*io_service);
             acceptor->open(endpoint.protocol());
-            acceptor->set_option(asio::socket_base::reuse_address(config.reuse_address));
+            acceptor->set_option(asio::socket_base::reuse_address(m_config.reuse_address));
             acceptor->bind(endpoint);
             acceptor->listen();
      
@@ -169,14 +169,14 @@ namespace SimpleWeb {
             
             //If num_threads>1, start m_io_service.run() in (num_threads-1) threads for thread-pooling
             threads.clear();
-            for(size_t c=1;c<config.num_threads;c++) {
+            for(size_t c=1;c<m_config.num_threads;c++) {
                 threads.emplace_back([this](){
                     io_service->run();
                 });
             }
 
             //Main thread
-            if(config.num_threads>0)
+            if(m_config.num_threads>0)
                 io_service->run();
 
             //Wait for the rest of the threads, if any, to finish as well
@@ -187,7 +187,7 @@ namespace SimpleWeb {
         
         void stop() {
             acceptor->close();
-            if(config.num_threads>0)
+            if(m_config.num_threads>0)
                 io_service->stop();
         }
         
@@ -210,12 +210,12 @@ namespace SimpleWeb {
         long timeout_content;
         
         ServerBase(unsigned short port, size_t num_threads, long timeout_request, long timeout_send_or_receive) :
-                config(port, num_threads), timeout_request(timeout_request), timeout_content(timeout_send_or_receive) {}
+                m_config(port, num_threads), timeout_request(timeout_request), timeout_content(timeout_send_or_receive) {}
         
         virtual void accept()=0;
         
         std::shared_ptr<asio::system_timer> set_timeout_on_socket(const std::shared_ptr<socket_type> &socket, long seconds) {
-            std::shared_ptr<asio::system_timer> timer = std::make_shared<asio::system_timer>(*io_service);
+            auto timer = std::make_shared<asio::system_timer>(*io_service);
             timer->expires_from_now(std::chrono::seconds(seconds));
             timer->async_wait([socket](const std::error_code& ec){
                 if(!ec) {
@@ -232,12 +232,12 @@ namespace SimpleWeb {
             //shared_ptr is used to pass temporary objects to the asynchronous functions
             std::shared_ptr<Request> request(new Request());
             try {
-                request->remote_endpoint_address=socket->lowest_layer().remote_endpoint().address().to_string();
-                request->remote_endpoint_port=socket->lowest_layer().remote_endpoint().port();
+                request->remote_endpoint_address = socket->lowest_layer().remote_endpoint().address().to_string();
+                request->remote_endpoint_port = socket->lowest_layer().remote_endpoint().port();
             }
             catch(const std::exception &e) {
-                if(exception_handler)
-                   exception_handler(e);
+                if(m_exception_handler)
+                   m_exception_handler(e);
             }
 
             //Set timeout on the following asio::async-read or write function
@@ -271,8 +271,8 @@ namespace SimpleWeb {
                             content_length=stoull(it->second);
                         }
                         catch(const std::exception &e) {
-                            if(exception_handler)
-                                exception_handler(e);
+                            if(m_exception_handler)
+                                m_exception_handler(e);
                             return;
                         }
                         if(content_length>num_additional_bytes) {
@@ -326,7 +326,7 @@ namespace SimpleWeb {
                             if(line[value_start]==' ')
                                 value_start++;
                             if(value_start<line.size())
-                                request->header.insert(std::make_pair(line.substr(0, param_end), line.substr(value_start, line.size()-value_start-1)));
+                                request->header.insert(make_pair(line.substr(0, param_end), line.substr(value_start, line.size()-value_start-1)));
                         }
     
                         getline(stream, line);
@@ -342,20 +342,20 @@ namespace SimpleWeb {
 
         void find_resource(const std::shared_ptr<socket_type> &socket, const std::shared_ptr<Request> &request) {
             //Find path- and method-match, and call write_response
-            for(auto& res: opt_resource) {
+            for(auto& res: m_opt_resource) {
                 if(request->method==res.first) {
                     for(auto& res_path: res.second) {
                         std::smatch sm_res;
                         if(std::regex_match(request->path, sm_res, res_path.first)) {
-                            request->path_match=std::move(sm_res);
+                            request->path_match=move(sm_res);
                             write_response(socket, request, res_path.second);
                             return;
                         }
                     }
                 }
             }
-            auto it_method=default_resource.find(request->method);
-            if(it_method!=default_resource.end()) {
+            auto it_method=m_default_resource.find(request->method);
+            if(it_method!=m_default_resource.end()) {
                 write_response(socket, request, it_method->second);
             }
         }
@@ -366,9 +366,7 @@ namespace SimpleWeb {
 							{ return tolower(key1v) == tolower(key2v); });
 		}
 							
-        void write_response(const std::shared_ptr<socket_type> &socket, const std::shared_ptr<Request> &request, 
-                std::function<void(std::shared_ptr<typename ServerBase<socket_type>::Response>,
-                                   std::shared_ptr<typename ServerBase<socket_type>::Request>)>& resource_function) {
+        void write_response(const std::shared_ptr<socket_type> &socket, const std::shared_ptr<Request> &request, http_handler& resource_function) {
             //Set timeout on the following asio::async-read or write function
             std::shared_ptr<asio::system_timer> timer;
             if(timeout_content>0)
@@ -385,8 +383,8 @@ namespace SimpleWeb {
                             http_version=stof(request->http_version);
                         }
                         catch(const std::exception &e){
-                            if(exception_handler)
-                                exception_handler(e);
+                            if(m_exception_handler)
+                                m_exception_handler(e);
                             return;
                         }
                         
@@ -405,9 +403,8 @@ namespace SimpleWeb {
                 resource_function(response, request);
             }
             catch(const std::exception &e) {
-                if(exception_handler)
-                    exception_handler(e);
-                return;
+                if(m_exception_handler)
+                    m_exception_handler(e);
             }
         }
     };
@@ -420,20 +417,20 @@ namespace SimpleWeb {
 	    {
 	    }
     };
-    
-    typedef asio::ip::tcp::socket HTTP;
+
+	using HTTP = asio::ip::tcp::socket;
     
     template<>
     class Server<HTTP> : public ServerBase<HTTP> {
     public:
 	    explicit Server(unsigned short port, size_t num_threads=1, long timeout_request=5, long timeout_content=300) :
-                ServerBase<HTTP>::ServerBase(port, num_threads, timeout_request, timeout_content) {}
+                ServerBase(port, num_threads, timeout_request, timeout_content) {}
         
     protected:
         void accept() override {
             //Create new socket for this connection
             //Shared_ptr is used to pass temporary objects to the asynchronous functions
-            std::shared_ptr<HTTP> socket = std::make_shared<HTTP>(*io_service);
+            auto socket = std::make_shared<HTTP>(*io_service);
                         
             acceptor->async_accept(*socket, [this, socket](const std::error_code& ec){
                 //Immediately start accepting a new connection (if io_service hasn't been stopped)

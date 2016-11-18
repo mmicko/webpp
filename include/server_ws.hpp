@@ -18,7 +18,7 @@
 #include <chrono>
 #include <regex>
 
-namespace SimpleWeb {
+namespace webpp {
     template <class socket_type>
     class SocketServer;
         
@@ -53,7 +53,7 @@ namespace SimpleWeb {
             unsigned short remote_endpoint_port;
             
         private:
-            Connection(socket_type *socket): remote_endpoint_port(0), socket(socket), strand(socket->get_io_service()), closed(false) { }
+	        explicit Connection(socket_type *socket): remote_endpoint_port(0), socket(socket), strand(socket->get_io_service()), closed(false) { }
 
             class SendData {
             public:
@@ -139,7 +139,6 @@ namespace SimpleWeb {
         
         class Endpoint {
             friend class SocketServerBase<socket_type>;
-        private:
             std::unordered_set<std::shared_ptr<Connection> > connections;
             std::mutex connections_mutex;
 
@@ -640,14 +639,14 @@ namespace SimpleWeb {
 	    {
 	    }
     };
-    
-    typedef asio::ip::tcp::socket WS;
+
+	using WS = asio::ip::tcp::socket;
     
     template<>
     class SocketServer<WS> : public SocketServerBase<WS> {
     public:
-        SocketServer(unsigned short port, size_t num_threads=1, size_t timeout_request=5, size_t timeout_idle=0) : 
-                SocketServerBase<WS>::SocketServerBase(port, num_threads, timeout_request, timeout_idle) {};
+	    explicit SocketServer(unsigned short port, size_t num_threads=1, size_t timeout_request=5, size_t timeout_idle=0) : 
+                SocketServerBase(port, num_threads, timeout_request, timeout_idle) {};
         
     protected:
         void accept() override {

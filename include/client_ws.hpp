@@ -10,7 +10,7 @@
 #include <list>
 #include "crypto.hpp"
 
-namespace SimpleWeb {
+namespace webpp {
     template <class socket_type>
     class SocketClient;
     
@@ -458,13 +458,13 @@ namespace SimpleWeb {
 	    {
 	    }
     };
-    
-    typedef asio::ip::tcp::socket WS;
+
+	using WS = asio::ip::tcp::socket;
     
     template<>
     class SocketClient<WS> : public SocketClientBase<WS> {
     public:
-        SocketClient(const std::string& server_port_path) : SocketClientBase<WS>::SocketClientBase(server_port_path, 80) {};
+	    explicit SocketClient(const std::string& server_port_path) : SocketClientBase(server_port_path, 80) {};
         
     protected:
         void connect() override {

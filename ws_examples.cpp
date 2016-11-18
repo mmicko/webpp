@@ -1,8 +1,8 @@
 #include "server_ws.hpp"
 #include "client_ws.hpp"
 
-using WsServer = SimpleWeb::SocketServer<SimpleWeb::WS>;
-using WsClient = SimpleWeb::SocketClient<SimpleWeb::WS>;
+using WsServer = webpp::SocketServer<webpp::WS>;
+using WsClient = webpp::SocketClient<webpp::WS>;
 
 int main() {
     //WebSocket (WS)-server at port 8080 using 1 thread

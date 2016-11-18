@@ -4,16 +4,16 @@
 #include "client_ws.hpp"
 #include "asio/ssl.hpp"
 
-namespace SimpleWeb {
-    typedef asio::ssl::stream<asio::ip::tcp::socket> WSS;    
+namespace webpp {
+	using WSS = asio::ssl::stream<asio::ip::tcp::socket>;    
     
     template<>
     class SocketClient<WSS> : public SocketClientBase<WSS> {
     public:
-        SocketClient(const std::string& server_port_path, bool verify_certificate=true, 
+	    explicit SocketClient(const std::string& server_port_path, bool verify_certificate=true, 
                 const std::string& cert_file=std::string(), const std::string& private_key_file=std::string(), 
                 const std::string& verify_file=std::string()) : 
-                SocketClientBase<WSS>::SocketClientBase(server_port_path, 443),
+                SocketClientBase(server_port_path, 443),
                 context(asio::ssl::context::tlsv12) {
             if(verify_certificate) {
                 context.set_verify_mode(asio::ssl::verify_peer);
