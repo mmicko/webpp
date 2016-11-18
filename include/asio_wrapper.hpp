@@ -19,6 +19,7 @@
 #define ASIO_HEADER_ONLY
 #define ASIO_STANDALONE
 #define ASIO_SEPARATE_COMPILATION
+//#define ASIO_NO_DEPRECATED
 #define ASIO_NOEXCEPT noexcept(true)
 #define ASIO_NOEXCEPT_OR_NOTHROW noexcept(true)
 #define ASIO_ERROR_CATEGORY_NOEXCEPT noexcept(true)

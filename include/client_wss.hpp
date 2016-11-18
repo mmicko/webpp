@@ -41,7 +41,7 @@ namespace webpp {
             resolver->async_resolve(query, [this]
                     (const std::error_code &ec, asio::ip::tcp::resolver::iterator it){
                 if(!ec) {
-                    connection=std::shared_ptr<Connection>(new Connection(new WSS(*io_service, context)));
+                    connection=std::shared_ptr<Connection>(new Connection(new WSS(*io_context, context)));
                     
                     asio::async_connect(connection->socket->lowest_layer(), it, [this]
                             (const std::error_code &ec, asio::ip::tcp::resolver::iterator /*it*/){

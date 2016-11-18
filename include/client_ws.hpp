@@ -40,7 +40,7 @@ namespace webpp {
             unsigned short remote_endpoint_port;
             
         private:
-	        explicit Connection(socket_type* socket): remote_endpoint_port(0), socket(socket), strand(socket->get_io_service()), closed(false) { }
+	        explicit Connection(socket_type* socket): remote_endpoint_port(0), socket(socket), strand(socket->get_io_context()), closed(false) { }
 
             class SendData {
             public:
@@ -115,27 +115,27 @@ namespace webpp {
         std::function<void(int, const std::string&)> onclose;
         
         void start() {
-            if(!io_service) {
-                io_service=std::make_shared<asio::io_service>();
-                internal_io_service=true;
+            if(!io_context) {
+                io_context=std::make_shared<asio::io_context>();
+                internal_io_context=true;
             }
             
-            if(io_service->stopped())
-                io_service->reset();
+            if(io_context->stopped())
+                io_context->reset();
             
             if(!resolver)
-                resolver= std::make_unique<asio::ip::tcp::resolver>(*io_service);
+                resolver= std::make_unique<asio::ip::tcp::resolver>(*io_context);
             
             connect();
             
-            if(internal_io_service)
-                io_service->run();
+            if(internal_io_context)
+                io_context->run();
         }
         
         void stop() const {
             resolver->cancel();
-            if(internal_io_service)
-                io_service->stop();
+            if(internal_io_context)
+                io_context->stop();
         }
         
         ///fin_rsv_opcode: 129=one fragment, text, 130=one fragment, binary, 136=close connection.
@@ -208,12 +208,12 @@ namespace webpp {
             send(send_stream, callback, 136);
         }
         
-        /// If you have your own asio::io_service, store its pointer here before running start().
-        std::shared_ptr<asio::io_service> io_service;
+        /// If you have your own asio::io_context, store its pointer here before running start().
+        std::shared_ptr<asio::io_context> io_context;
     protected:
         const std::string ws_magic_string="258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
         
-        bool internal_io_service=false;
+        bool internal_io_context=false;
         std::unique_ptr<asio::ip::tcp::resolver> resolver;
         
         std::string host;
@@ -473,7 +473,7 @@ namespace webpp {
             resolver->async_resolve(query, [this]
                     (const std::error_code &ec, asio::ip::tcp::resolver::iterator it){
                 if(!ec) {
-                    connection=std::shared_ptr<Connection>(new Connection(new WS(*io_service)));
+                    connection=std::shared_ptr<Connection>(new Connection(new WS(*io_context)));
 
                     asio::async_connect(*connection->socket, it, [this]
                             (const std::error_code &ec, asio::ip::tcp::resolver::iterator /*it*/){

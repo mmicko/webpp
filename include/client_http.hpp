@@ -123,7 +123,7 @@ namespace webpp {
         }
         
     protected:
-        asio::io_service io_service;
+        asio::io_context io_context;
         asio::ip::tcp::endpoint endpoint;
         asio::ip::tcp::resolver resolver;
         
@@ -134,7 +134,7 @@ namespace webpp {
         unsigned short port;
                 
         ClientBase(const std::string& host_port, unsigned short default_port) : 
-                resolver(io_service), socket_error(false) {
+                resolver(io_context), socket_error(false) {
             size_t host_end=host_port.find(':');
             if(host_end==std::string::npos) {
                 host=host_port;
@@ -252,7 +252,7 @@ namespace webpp {
     class Client<HTTP> : public ClientBase<HTTP> {
     public:
 	    explicit Client(const std::string& server_port_path) : ClientBase(server_port_path, 80) {
-            socket=std::make_shared<HTTP>(io_service);
+            socket=std::make_shared<HTTP>(io_context);
         }
         
     protected:

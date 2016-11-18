@@ -29,7 +29,7 @@ namespace webpp {
             if(verify_file.size()>0)
                 m_context.load_verify_file(verify_file);
             
-            socket=std::make_shared<HTTPS>(io_service, m_context);
+            socket=std::make_shared<HTTPS>(io_context, m_context);
         }
 
     protected:

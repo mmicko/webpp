@@ -146,20 +146,20 @@ namespace webpp {
                 }
             }
 
-            if(!io_service)
-                io_service=std::make_shared<asio::io_service>();
+            if(!io_context)
+                io_context=std::make_shared<asio::io_context>();
 
-            if(io_service->stopped())
-                io_service->reset();
+            if(io_context->stopped())
+                io_context.reset();
 
             asio::ip::tcp::endpoint endpoint;
             if(m_config.address.size()>0)
-                endpoint=asio::ip::tcp::endpoint(asio::ip::address::from_string(m_config.address), m_config.port);
+                endpoint=asio::ip::tcp::endpoint(asio::ip::make_address(m_config.address), m_config.port);
             else
                 endpoint=asio::ip::tcp::endpoint(asio::ip::tcp::v4(), m_config.port);
             
             if(!acceptor)
-                acceptor= std::make_unique<asio::ip::tcp::acceptor>(*io_service);
+                acceptor= std::make_unique<asio::ip::tcp::acceptor>(*io_context);
             acceptor->open(endpoint.protocol());
             acceptor->set_option(asio::socket_base::reuse_address(m_config.reuse_address));
             acceptor->bind(endpoint);
@@ -167,17 +167,17 @@ namespace webpp {
      
             accept(); 
             
-            //If num_threads>1, start m_io_service.run() in (num_threads-1) threads for thread-pooling
+            //If num_threads>1, start m_io_context.run() in (num_threads-1) threads for thread-pooling
             threads.clear();
             for(size_t c=1;c<m_config.num_threads;c++) {
                 threads.emplace_back([this](){
-                    io_service->run();
+                    io_context->run();
                 });
             }
 
             //Main thread
             if(m_config.num_threads>0)
-                io_service->run();
+                io_context->run();
 
             //Wait for the rest of the threads, if any, to finish as well
             for(auto& t: threads) {
@@ -188,7 +188,7 @@ namespace webpp {
         void stop() {
             acceptor->close();
             if(m_config.num_threads>0)
-                io_service->stop();
+                io_context->stop();
         }
         
         ///Use this function if you need to recursively send parts of a longer message
@@ -199,9 +199,9 @@ namespace webpp {
             });
         }
 
-        /// If you have your own asio::io_service, store its pointer here before running start().
+        /// If you have your own asio::io_context, store its pointer here before running start().
         /// You might also want to set config.num_threads to 0.
-        std::shared_ptr<asio::io_service> io_service;
+        std::shared_ptr<asio::io_context> io_context;
     protected:
         std::unique_ptr<asio::ip::tcp::acceptor> acceptor;
         std::vector<std::thread> threads;
@@ -215,7 +215,7 @@ namespace webpp {
         virtual void accept()=0;
         
         std::shared_ptr<asio::system_timer> set_timeout_on_socket(const std::shared_ptr<socket_type> &socket, long seconds) {
-            auto timer = std::make_shared<asio::system_timer>(*io_service);
+            auto timer = std::make_shared<asio::system_timer>(*io_context);
             timer->expires_from_now(std::chrono::seconds(seconds));
             timer->async_wait([socket](const std::error_code& ec){
                 if(!ec) {
@@ -430,10 +430,10 @@ namespace webpp {
         void accept() override {
             //Create new socket for this connection
             //Shared_ptr is used to pass temporary objects to the asynchronous functions
-            auto socket = std::make_shared<HTTP>(*io_service);
+            auto socket = std::make_shared<HTTP>(*io_context);
                         
             acceptor->async_accept(*socket, [this, socket](const std::error_code& ec){
-                //Immediately start accepting a new connection (if io_service hasn't been stopped)
+                //Immediately start accepting a new connection (if io_context hasn't been stopped)
                 if (ec != asio::error::operation_aborted)
                     accept();
                                 

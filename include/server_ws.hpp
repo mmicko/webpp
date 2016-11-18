@@ -53,7 +53,7 @@ namespace webpp {
             unsigned short remote_endpoint_port;
             
         private:
-	        explicit Connection(socket_type *socket): remote_endpoint_port(0), socket(socket), strand(socket->get_io_service()), closed(false) { }
+	        explicit Connection(socket_type *socket): remote_endpoint_port(0), socket(socket), strand(socket->get_io_context()), closed(false) { }
 
             class SendData {
             public:
@@ -184,11 +184,11 @@ namespace webpp {
                 opt_endpoint.emplace_back(std::regex(endp.first), &endp.second);
             }
             
-            if(!io_service)
-                io_service=std::make_shared<asio::io_service>();
+            if(!io_context)
+                io_context=std::make_shared<asio::io_context>();
             
-            if(io_service->stopped())
-                io_service->reset();
+            if(io_context->stopped())
+                io_context->reset();
             
             asio::ip::tcp::endpoint endpoint;
             if(config.address.size()>0)
@@ -197,7 +197,7 @@ namespace webpp {
                 endpoint=asio::ip::tcp::endpoint(asio::ip::tcp::v4(), config.port);
             
             if(!acceptor)
-                acceptor= std::make_unique<asio::ip::tcp::acceptor>(*io_service);
+                acceptor= std::make_unique<asio::ip::tcp::acceptor>(*io_context);
             acceptor->open(endpoint.protocol());
             acceptor->set_option(asio::socket_base::reuse_address(config.reuse_address));
             acceptor->bind(endpoint);
@@ -205,16 +205,16 @@ namespace webpp {
             
             accept();
             
-            //If num_threads>1, start m_io_service.run() in (num_threads-1) threads for thread-pooling
+            //If num_threads>1, start m_io_context.run() in (num_threads-1) threads for thread-pooling
             threads.clear();
             for(size_t c=1;c<config.num_threads;c++) {
                 threads.emplace_back([this](){
-                    io_service->run();
+                    io_context->run();
                 });
             }
             //Main thread
             if(config.num_threads>0)
-                io_service->run();
+                io_context->run();
 
             //Wait for the rest of the threads, if any, to finish as well
             for(auto& t: threads) {
@@ -225,7 +225,7 @@ namespace webpp {
         void stop() {
             acceptor->close();
             if(config.num_threads>0)
-                io_service->stop();
+                io_context->stop();
             
             for(auto& p: endpoint)
                 p.second.connections.clear();
@@ -299,9 +299,9 @@ namespace webpp {
             return all_connections;
         }
         
-        /// If you have your own asio::io_service, store its pointer here before running start().
+        /// If you have your own asio::io_context, store its pointer here before running start().
         /// You might also want to set config.num_threads to 0.
-        std::shared_ptr<asio::io_service> io_service;
+        std::shared_ptr<asio::io_context> io_context;
     protected:
         const std::string ws_magic_string="258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
         
@@ -318,7 +318,7 @@ namespace webpp {
         virtual void accept()=0;
         
         std::shared_ptr<asio::system_timer> set_timeout_on_connection(const std::shared_ptr<Connection> &connection, size_t seconds) {
-            std::shared_ptr<asio::system_timer> timer(new asio::system_timer(*io_service));
+            std::shared_ptr<asio::system_timer> timer(new asio::system_timer(*io_context));
             timer->expires_from_now(std::chrono::seconds(static_cast<long>(seconds)));
             timer->async_wait([connection](const std::error_code& ec){
                 if(!ec) {
@@ -606,7 +606,7 @@ namespace webpp {
         
         void timer_idle_init(const std::shared_ptr<Connection> &connection) {
             if(timeout_idle>0) {
-                connection->timer_idle= std::make_unique<asio::system_timer>(*io_service);
+                connection->timer_idle= std::make_unique<asio::system_timer>(*io_context);
                 connection->timer_idle->expires_from_now(std::chrono::seconds(static_cast<unsigned long>(timeout_idle)));
                 timer_idle_expired_function(connection);
             }
@@ -652,10 +652,10 @@ namespace webpp {
         void accept() override {
             //Create new socket for this connection (stored in Connection::socket)
             //Shared_ptr is used to pass temporary objects to the asynchronous functions
-            std::shared_ptr<Connection> connection(new Connection(new WS(*io_service)));
+            std::shared_ptr<Connection> connection(new Connection(new WS(*io_context)));
             
             acceptor->async_accept(*connection->socket, [this, connection](const std::error_code& ec) {
-                //Immediately start accepting a new connection (if io_service hasn't been stopped)
+                //Immediately start accepting a new connection (if io_context hasn't been stopped)
                 if (ec != asio::error::operation_aborted)
                     accept();
 
