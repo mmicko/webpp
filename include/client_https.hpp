@@ -37,8 +37,8 @@ namespace webpp {
         
         void connect() override {
             if(socket_error || !socket->lowest_layer().is_open()) {
-                asio::ip::tcp::resolver::query query(host, std::to_string(port));
-                asio::connect(socket->lowest_layer(), resolver.resolve(query));
+                asio::ip::tcp::resolver resolver(io_context);
+                asio::connect(socket->lowest_layer(), resolver.resolve(host, std::to_string(port)));
                 
                 asio::ip::tcp::no_delay option(true);
                 socket->lowest_layer().set_option(option);

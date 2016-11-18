@@ -258,9 +258,9 @@ namespace webpp {
     protected:
         void connect() override {
             if(socket_error || !socket->is_open()) {
-                asio::ip::tcp::resolver::query query(host, std::to_string(port));
-                asio::connect(*socket, resolver.resolve(query));
-                
+                asio::ip::tcp::resolver resolver(io_context);
+                asio::connect(*socket, resolver.resolve(host, std::to_string(port)));
+
                 asio::ip::tcp::no_delay option(true);
                 socket->set_option(option);
                 
