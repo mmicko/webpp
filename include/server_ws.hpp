@@ -319,7 +319,7 @@ namespace webpp {
         
         std::shared_ptr<asio::system_timer> set_timeout_on_connection(const std::shared_ptr<Connection> &connection, size_t seconds) {
             std::shared_ptr<asio::system_timer> timer(new asio::system_timer(*io_context));
-            timer->expires_from_now(std::chrono::seconds(static_cast<long>(seconds)));
+            timer->expires_at(std::chrono::system_clock::now() + std::chrono::seconds(static_cast<long>(seconds)));
             timer->async_wait([connection](const std::error_code& ec){
                 if(!ec) {
                     connection->socket->lowest_layer().shutdown(asio::ip::tcp::socket::shutdown_both);

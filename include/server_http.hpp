@@ -216,7 +216,7 @@ namespace webpp {
         
         std::shared_ptr<asio::system_timer> set_timeout_on_socket(const std::shared_ptr<socket_type> &socket, long seconds) {
             auto timer = std::make_shared<asio::system_timer>(*io_context);
-            timer->expires_from_now(std::chrono::seconds(seconds));
+            timer->expires_at(std::chrono::system_clock::now() + std::chrono::seconds(seconds));
             timer->async_wait([socket](const std::error_code& ec){
                 if(!ec) {
 					std::error_code newec = ec;
