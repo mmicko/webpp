@@ -53,16 +53,16 @@ namespace webpp {
                                     [this](const std::error_code& ec) {
                                 if(!ec)
                                     handshake();
-                                else
-                                    throw std::invalid_argument(ec.message());
+                                else if(onerror)
+                                    onerror(ec);
                             });
                         }
-                        else
-                            throw std::invalid_argument(ec.message());
+                        else if(onerror)
+                            onerror(ec);
                     });
                 }
-                else
-                    throw std::invalid_argument(ec.message());
+                else if(onerror)
+                    onerror(ec);
             });
         }
     };

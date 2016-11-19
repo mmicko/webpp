@@ -48,9 +48,8 @@ namespace webpp {
                             [this, connection, timer](const std::error_code& ec) {
                         if(timeout_request>0)
                             timer->cancel();
-                        if(!ec) {
+                        if(!ec)
                             read_handshake(connection);
-                        }
                     });
                 }
             });

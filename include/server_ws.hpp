@@ -149,9 +149,8 @@ namespace webpp {
             std::function<void(std::shared_ptr<Connection>, int, const std::string&)> onclose;
             
             std::unordered_set<std::shared_ptr<Connection> > get_connections() {
-                connections_mutex.lock();
+                std::lock_guard<std::mutex> lock(connections_mutex);
                 auto copy=connections;
-                connections_mutex.unlock();
                 return copy;
             }
         };
@@ -273,10 +272,9 @@ namespace webpp {
         void send_close(const std::shared_ptr<Connection> &connection, int status, const std::string& reason="",
                 const std::function<void(const std::error_code&)>& callback=nullptr) const {
             //Send close only once (in case close is initiated by server)
-            if(connection->closed.load()) {
+            if(connection->closed)
                 return;
-            }
-            connection->closed.store(true);
+            connection->closed=true;
             
             auto send_stream=std::make_shared<SendStream>();
             
@@ -292,9 +290,8 @@ namespace webpp {
         std::unordered_set<std::shared_ptr<Connection> > get_connections() {
             std::unordered_set<std::shared_ptr<Connection> > all_connections;
             for(auto& e: endpoint) {
-                e.second.connections_mutex.lock();
+                std::lock_guard<std::mutex> lock(e.second.connections_mutex);
                 all_connections.insert(e.second.connections.begin(), e.second.connections.end());
-                e.second.connections_mutex.unlock();
             }
             return all_connections;
         }
@@ -572,9 +569,10 @@ namespace webpp {
         void connection_open(const std::shared_ptr<Connection> &connection, Endpoint& endpoint) {
             timer_idle_init(connection);
             
-            endpoint.connections_mutex.lock();
-            endpoint.connections.insert(connection);
-            endpoint.connections_mutex.unlock();
+            {
+                std::lock_guard<std::mutex> lock(endpoint.connections_mutex);
+                endpoint.connections.insert(connection);
+            }
             
             if(endpoint.onopen)
                 endpoint.onopen(connection);
@@ -583,9 +581,10 @@ namespace webpp {
         void connection_close(const std::shared_ptr<Connection> &connection, Endpoint& endpoint, int status, const std::string& reason) const {
             timer_idle_cancel(connection);
             
-            endpoint.connections_mutex.lock();
-            endpoint.connections.erase(connection);
-            endpoint.connections_mutex.unlock();    
+            {
+                std::lock_guard<std::mutex> lock(endpoint.connections_mutex);
+                endpoint.connections.erase(connection);
+            }
             
             if(endpoint.onclose)
                 endpoint.onclose(connection, status, reason);
@@ -594,9 +593,10 @@ namespace webpp {
         void connection_error(const std::shared_ptr<Connection> &connection, Endpoint& endpoint, const std::error_code& ec) const {
             timer_idle_cancel(connection);
             
-            endpoint.connections_mutex.lock();
-            endpoint.connections.erase(connection);
-            endpoint.connections_mutex.unlock();
+            {
+                std::lock_guard<std::mutex> lock(endpoint.connections_mutex);
+                endpoint.connections.erase(connection);
+            }
             
             if(endpoint.onerror) {
                 std::error_code ec_tmp=ec;
@@ -612,9 +612,8 @@ namespace webpp {
             }
         }
         void timer_idle_reset(const std::shared_ptr<Connection> &connection) const {
-            if(timeout_idle>0 && connection->timer_idle->expires_from_now(std::chrono::seconds(static_cast<unsigned long>(timeout_idle)))>0) {
+            if(timeout_idle>0 && connection->timer_idle->expires_from_now(std::chrono::seconds(static_cast<unsigned long>(timeout_idle)))>0)
                 timer_idle_expired_function(connection);
-            }
         }
         void timer_idle_cancel(const std::shared_ptr<Connection> &connection) const {
             if(timeout_idle>0)
@@ -623,10 +622,8 @@ namespace webpp {
         
         void timer_idle_expired_function(const std::shared_ptr<Connection> &connection) const {
             connection->timer_idle->async_wait([this, connection](const std::error_code& ec){
-                if(!ec) {
-                    //1000=normal closure
-                    send_close(connection, 1000, "idle timeout");
-                }
+                if(!ec)
+                    send_close(connection, 1000, "idle timeout"); //1000=normal closure
             });
         }
     };
