@@ -56,7 +56,7 @@ namespace webpp {
 		public:
 			Response& status(int number) { m_ostream << statusToString(number); return *this; }
 			void type(std::string str) { m_header << "Content-Type: "<< str << "\r\n"; }
-			void send(std::string str) { m_ostream << m_header.str() << "Content - Length: " << str.length() << "\r\n\r\n" << str; }
+			void send(std::string str) { m_ostream << m_header.str() << "Content-Length: " << str.length() << "\r\n\r\n" << str; }
 			size_t size() const { return m_streambuf.size(); }
 			std::shared_ptr<socket_type> socket() { return m_socket; }
         };
