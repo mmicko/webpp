@@ -13,17 +13,12 @@ int main() {
     //1 thread is usually faster than several threads
     HttpServer server(8080, 1);
     
-    //Add resources using path-regex and method-string, and an anonymous function
+	//Add resources using path-regex and method-string, and an anonymous function
     //POST-example for the path /string, responds the posted string
     server.on_post("^/string$", [](auto response, auto request) {
         //Retrieve string:
         auto content=request->content.string();
-        //request->content.string() is a convenience function for:
-        //stringstream ss;
-        //ss << request->content.rdbuf();
-        //string content=ss.str();
-        
-        *response << "HTTP/1.1 200 OK\r\nContent-Length: " << content.length() << "\r\n\r\n" << content;
+		response->status(200).send(content);
     });
     
     //POST-example for the path /json, responds firstName+" "+lastName from the posted json
@@ -38,14 +33,11 @@ int main() {
         try {
 
 			std::string name="Test Name ";
-
-            *response << "HTTP/1.1 200 OK\r\n"
-                      << "Content-Type: application/json\r\n"
-                      << "Content-Length: " << name.length() << "\r\n\r\n"
-                      << name;
+			response->type("application/json");
+			response->status(200).send(name);
         }
         catch(std::exception& e) {
-            *response << "HTTP/1.1 400 Bad Request\r\nContent-Length: " << strlen(e.what()) << "\r\n\r\n" << e.what();
+			response->status(400).send(e.what());
         }
     });
 
@@ -59,17 +51,14 @@ int main() {
             content_stream << header.first << ": " << header.second << "<br>";
         }
         
-        //find length of content_stream (length received using content_stream.tellp())
-        content_stream.seekp(0, std::ios::end);
-        
-        *response <<  "HTTP/1.1 200 OK\r\nContent-Length: " << content_stream.tellp() << "\r\n\r\n" << content_stream.rdbuf();
+		response->status(200).send(content_stream.str());
     });
     
     //GET-example for the path /match/[number], responds with the matched string in path (number)
     //For instance a request GET /match/123 will receive: 123
     server.on_get("^/match/([0-9]+)$", [&server](auto response, auto request) {
 		std::string number=request->path_match[1];
-        *response << "HTTP/1.1 200 OK\r\nContent-Length: " << number.length() << "\r\n\r\n" << number;
+		response->status(200).send(number);
     });
     
     //Get example simulating heavy work in a separate thread
@@ -77,7 +66,7 @@ int main() {
 		std::thread work_thread([response] {
 			std::this_thread::sleep_for(std::chrono::seconds(5));
 			std::string message="Work done";
-            *response << "HTTP/1.1 200 OK\r\nContent-Length: " << message.length() << "\r\n\r\n" << message;
+			response->status(200).send(message);
         });
         work_thread.detach();
     });
@@ -88,7 +77,7 @@ int main() {
     //Can for instance be used to retrieve an HTML 5 client that uses REST-resources on this server
 	server.on_get([&server](auto response, auto request) {
 		std::string message = "Dummy";
-		*response << "HTTP/1.1 200 OK\r\nContent-Length: " << message.length() << "\r\n\r\n" << message;
+		response->status(200).send(message);
 //        try {
 //            auto web_root_path=boost::filesystem::canonical("web");
 //            auto path=boost::filesystem::canonical(web_root_path/request->path);

@@ -21,19 +21,44 @@ namespace webpp {
     public:
         virtual ~ServerBase() {}
 
-        class Response : public std::ostream {
-            friend class ServerBase<socket_type>;
+		class Response {
+			friend class ServerBase<socket_type>;
 
-            asio::streambuf streambuf;
+			asio::streambuf m_streambuf;
 
-            std::shared_ptr<socket_type> socket;
+			std::shared_ptr<socket_type> m_socket;
+			std::ostream m_ostream;
+			std::stringstream m_header;
+			explicit Response(const std::shared_ptr<socket_type> &socket) : m_ostream(&m_streambuf), m_socket(socket) {}
 
-	        explicit Response(const std::shared_ptr<socket_type> &socket): std::ostream(&streambuf), socket(socket) {}
-
-        public:
-            size_t size() const {
-                return streambuf.size();
-            }
+			std::string statusToString(int status)
+			{
+				switch (status) {
+					default:
+					case 200: return "HTTP/1.0 200 OK\r\n";
+					case 201: return "HTTP/1.0 201 Created\r\n";
+					case 202: return "HTTP/1.0 202 Accepted\r\n";
+					case 204: return "HTTP/1.0 204 No Content\r\n";
+					case 300: return "HTTP/1.0 300 Multiple Choices\r\n";
+					case 301: return "HTTP/1.0 301 Moved Permanently\r\n";
+					case 302: return "HTTP/1.0 302 Moved Temporarily\r\n";
+					case 304: return "HTTP/1.0 304 Not Modified\r\n";
+					case 400: return "HTTP/1.0 400 Bad Request\r\n";
+					case 401: return "HTTP/1.0 401 Unauthorized\r\n";
+					case 403: return "HTTP/1.0 403 Forbidden\r\n";
+					case 404: return "HTTP/1.0 404 Not Found\r\n";
+					case 500: return "HTTP/1.0 500 Internal Server Error\r\n";
+					case 501: return "HTTP/1.0 501 Not Implemented\r\n";
+					case 502: return "HTTP/1.0 502 Bad Gateway\r\n";
+					case 504: return "HTTP/1.0 503 Service Unavailable\r\n";
+				}				
+			}
+		public:
+			Response& status(int number) { m_ostream << statusToString(number); return *this; }
+			void type(std::string str) { m_header << "Content-Type: "<< str << "\r\n"; }
+			void send(std::string str) { m_ostream << m_header.str() << "Content - Length: " << str.length() << "\r\n\r\n" << str; }
+			size_t size() const { return m_streambuf.size(); }
+			std::shared_ptr<socket_type> socket() { return m_socket; }
         };
         
         class Content : public std::istream {
@@ -193,7 +218,7 @@ namespace webpp {
         
         ///Use this function if you need to recursively send parts of a longer message
         void send(const std::shared_ptr<Response> &response, const std::function<void(const std::error_code&)>& callback=nullptr) const {
-            asio::async_write(*response->socket, response->streambuf, [this, response, callback](const std::error_code& ec, size_t /*bytes_transferred*/) {
+            asio::async_write(*response->socket(), response->m_streambuf, [this, response, callback](const std::error_code& ec, size_t /*bytes_transferred*/) {
                 if(callback)
                     callback(ec);
             });
@@ -394,7 +419,7 @@ namespace webpp {
                                 return;
                         }
                         if(http_version>1.05)
-                            read_request_and_content(response->socket);
+                            read_request_and_content(response->socket());
                     }
                 });
             });

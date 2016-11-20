@@ -11,122 +11,109 @@ int main() {
     //1 thread is usually faster than several threads
     HttpsServer server(8080, 1, "server.crt", "server.key");
     
-    //Add resources using path-regex and method-string, and an anonymous function
-    //POST-example for the path /string, responds the posted string
-    server.on_post("^/string$", [](auto response, auto request) {
-        //Retrieve string:
-        auto content=request->content.string();
-        //request->content.string() is a convenience function for:
-        //stringstream ss;
-        //ss << request->content.rdbuf();
-        //string content=ss.str();
-        
-        *response << "HTTP/1.1 200 OK\r\nContent-Length: " << content.length() << "\r\n\r\n" << content;
-    });
-    
-    //POST-example for the path /json, responds firstName+" "+lastName from the posted json
-    //Responds with an appropriate error message if the posted json is not valid, or if firstName or lastName is missing
-    //Example posted json:
-    //{
-    //  "firstName": "John",
-    //  "lastName": "Smith",
-    //  "age": 25
-    //}
-    server.on_post("^/json$", [](auto response, auto request) {
-        try {
-           //ptree pt;
-           //read_json(request->content, pt);
+	//Add resources using path-regex and method-string, and an anonymous function
+	//POST-example for the path /string, responds the posted string
+	server.on_post("^/string$", [](auto response, auto request) {
+		//Retrieve string:
+		auto content = request->content.string();
+		response->status(200).send(content);
+	});
 
-            //string name=pt.get<string>("firstName")+" "+pt.get<string>("lastName");
-            std::string name="Test Name ";
+	//POST-example for the path /json, responds firstName+" "+lastName from the posted json
+	//Responds with an appropriate error message if the posted json is not valid, or if firstName or lastName is missing
+	//Example posted json:
+	//{
+	//  "firstName": "John",
+	//  "lastName": "Smith",
+	//  "age": 25
+	//}
+	server.on_post("^/json$", [](auto response, auto /*request*/) {
+		try {
 
-            *response << "HTTP/1.1 200 OK\r\n"
-                      << "Content-Type: application/json\r\n"
-                      << "Content-Length: " << name.length() << "\r\n\r\n"
-                      << name;
-        }
-        catch(std::exception& e) {
-            *response << "HTTP/1.1 400 Bad Request\r\nContent-Length: " << strlen(e.what()) << "\r\n\r\n" << e.what();
-        }
-    });
-    
-    //GET-example for the path /info
-    //Responds with request-information
-    server.on_get("^/info$", [](auto response, auto request) {
-        std::stringstream content_stream;
-        content_stream << "<h1>Request from " << request->remote_endpoint_address << " (" << request->remote_endpoint_port << ")</h1>";
-        content_stream << request->method << " " << request->path << " HTTP/" << request->http_version << "<br>";
-        for(auto& header: request->header) {
-            content_stream << header.first << ": " << header.second << "<br>";
-        }
-        
-        //find length of content_stream (length received using content_stream.tellp())
-        content_stream.seekp(0, std::ios::end);
-        
-        *response <<  "HTTP/1.1 200 OK\r\nContent-Length: " << content_stream.tellp() << "\r\n\r\n" << content_stream.rdbuf();
-    });
-    
-    //GET-example for the path /match/[number], responds with the matched string in path (number)
-    //For instance a request GET /match/123 will receive: 123
-    server.on_get("^/match/([0-9]+)$", [&server](auto response, auto request) {
-        std::string number=request->path_match[1];
-        *response << "HTTP/1.1 200 OK\r\nContent-Length: " << number.length() << "\r\n\r\n" << number;
-    });
-    
-    //Get example simulating heavy work in a separate thread
-    server.on_get("^/work$", [&server](auto response, auto /*request*/) {
-        std::thread work_thread([response] {
-            std::this_thread::sleep_for(std::chrono::seconds(5));
-            std::string message="Work done";
-            *response << "HTTP/1.1 200 OK\r\nContent-Length: " << message.length() << "\r\n\r\n" << message;
-        });
-        work_thread.detach();
-    });
-    
-    //Default GET-example. If no other matches, this anonymous function will be called. 
-    //Will respond with content in the web/-directory, and its subdirectories.
-    //Default file: index.html
-    //Can for instance be used to retrieve an HTML 5 client that uses REST-resources on this server
-   server.on_get([&server](auto response, auto request) {
-	   std::string message = "Dummy";
-	   *response << "HTTP/1.1 200 OK\r\nContent-Length: " << message.length() << "\r\n\r\n" << message;
-//       try {
-//           auto web_root_path=boost::filesystem::canonical("web");
-//           auto path=boost::filesystem::canonical(web_root_path/request->path);
-//           //Check if path is within web_root_path
-//           if(distance(web_root_path.begin(), web_root_path.end())>distance(path.begin(), path.end()) ||
-//              !equal(web_root_path.begin(), web_root_path.end(), path.begin()))
-//               throw invalid_argument("path must be within root path");
-//           if(boost::filesystem::is_directory(path))
-//               path/="index.html";
-//           if(!(boost::filesystem::exists(path) && boost::filesystem::is_regular_file(path)))
-//               throw invalid_argument("file does not exist");
-//           
-//           auto ifs=make_shared<ifstream>();
-//           ifs->open(path.string(), ifstream::in | ios::binary);
-//           
-//           if(*ifs) {
-//               ifs->seekg(0, ios::end);
-//               auto length=ifs->tellg();
-//               
-//               ifs->seekg(0, ios::beg);
-//               
-//               *response << "HTTP/1.1 200 OK\r\nContent-Length: " << length << "\r\n\r\n";
-//               default_resource_send(server, response, ifs);
-//           }
-//           else
-//               throw invalid_argument("could not read file");
-//       }
-//       catch(const exception &e) {
-//           string content="Could not open path "+request->path+": "+e.what();
-//           *response << "HTTP/1.1 400 Bad Request\r\nContent-Length: " << content.length() << "\r\n\r\n" << content;
-//       }
-    });
+			std::string name = "Test Name ";
+			response->type("application/json");
+			response->status(200).send(name);
+		}
+		catch (std::exception& e) {
+			response->status(400).send(e.what());
+		}
+	});
 
-    std::thread server_thread([&server](){
-        //Start server
-        server.start();
-    });
+	//GET-example for the path /info
+	//Responds with request-information
+	server.on_get("^/info$", [](auto response, auto request) {
+		std::stringstream content_stream;
+		content_stream << "<h1>Request from " << request->remote_endpoint_address << " (" << request->remote_endpoint_port << ")</h1>";
+		content_stream << request->method << " " << request->path << " HTTP/" << request->http_version << "<br>";
+		for (auto& header : request->header) {
+			content_stream << header.first << ": " << header.second << "<br>";
+		}
+
+		response->status(200).send(content_stream.str());
+	});
+
+	//GET-example for the path /match/[number], responds with the matched string in path (number)
+	//For instance a request GET /match/123 will receive: 123
+	server.on_get("^/match/([0-9]+)$", [&server](auto response, auto request) {
+		std::string number = request->path_match[1];
+		response->status(200).send(number);
+	});
+
+	//Get example simulating heavy work in a separate thread
+	server.on_get("^/work$", [&server](auto response, auto /*request*/) {
+		std::thread work_thread([response] {
+			std::this_thread::sleep_for(std::chrono::seconds(5));
+			std::string message = "Work done";
+			response->status(200).send(message);
+		});
+		work_thread.detach();
+	});
+
+	//Default GET-example. If no other matches, this anonymous function will be called. 
+	//Will respond with content in the web/-directory, and its subdirectories.
+	//Default file: index.html
+	//Can for instance be used to retrieve an HTML 5 client that uses REST-resources on this server
+	server.on_get([&server](auto response, auto request) {
+		std::string message = "Dummy";
+		response->status(200).send(message);
+		//        try {
+		//            auto web_root_path=boost::filesystem::canonical("web");
+		//            auto path=boost::filesystem::canonical(web_root_path/request->path);
+		//            //Check if path is within web_root_path
+		//            if(distance(web_root_path.begin(), web_root_path.end())>distance(path.begin(), path.end()) ||
+		//               !equal(web_root_path.begin(), web_root_path.end(), path.begin()))
+		//                throw invalid_argument("path must be within root path");
+		//            if(boost::filesystem::is_directory(path))
+		//                path/="index.html";
+		//            if(!(boost::filesystem::exists(path) && boost::filesystem::is_regular_file(path)))
+		//                throw invalid_argument("file does not exist");
+		//            
+		//            auto ifs=make_shared<ifstream>();
+		//            ifs->open(path.string(), ifstream::in | ios::binary);
+		//            
+		//            if(*ifs) {
+		//                ifs->seekg(0, ios::end);
+		//                auto length=ifs->tellg();
+		//                
+		//                ifs->seekg(0, ios::beg);
+		//                
+		//                *response << "HTTP/1.1 200 OK\r\nContent-Length: " << length << "\r\n\r\n";
+		//                default_resource_send(server, response, ifs);
+		//            }
+		//            else
+		//                throw invalid_argument("could not read file");
+		//        }
+		//        catch(const exception &e) {
+		//            string content="Could not open path "+request->path+": "+e.what();
+		//            *response << "HTTP/1.1 400 Bad Request\r\nContent-Length: " << content.length() << "\r\n\r\n" << content;
+		//        }
+	});
+
+	std::thread server_thread([&server]() {
+		//Start server
+		server.start();
+	});
+
     
     //Wait for server to start so that the client can connect
     std::this_thread::sleep_for(std::chrono::seconds(1));
