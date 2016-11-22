@@ -8,10 +8,14 @@ using HttpServer = webpp::Server<webpp::HTTP>;
 using HttpClient = webpp::Client<webpp::HTTP>;
 
 int main() {
+
+	std::shared_ptr<asio::io_context> io_context = std::make_shared<asio::io_context>();
     //HTTP-server at port 8080 using 1 thread
     //Unless you do more heavy non-threaded processing in the resources,
     //1 thread is usually faster than several threads
     HttpServer server(8080);
+
+	server.set_io_context(io_context);
     
 	//Add resources using path-regex and method-string, and an anonymous function
     //POST-example for the path /string, responds the posted string
@@ -111,9 +115,10 @@ int main() {
 //        }
     });
     
-	std::thread server_thread([&server](){
+	std::thread server_thread([&server, &io_context](){
         //Start server
         server.start();
+		io_context->run();
     });
     
     //Wait for server to start so that the client can connect

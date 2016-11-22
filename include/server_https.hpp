@@ -28,7 +28,7 @@ namespace webpp {
         void accept() override {
             //Create new socket for this connection
             //Shared_ptr is used to pass temporary objects to the asynchronous functions
-	        auto socket = std::make_shared<HTTPS>(*io_context, context);
+	        auto socket = std::make_shared<HTTPS>(*m_io_context, context);
 
             acceptor->async_accept((*socket).lowest_layer(), [this, socket](const std::error_code& ec) {
                 //Immediately start accepting a new connection (if io_context hasn't been stopped)

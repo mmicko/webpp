@@ -29,9 +29,9 @@ namespace webpp {
 			std::shared_ptr<socket_type> m_socket;
 			std::ostream m_ostream;
 			std::stringstream m_header;
-			explicit Response(const std::shared_ptr<socket_type> &socket) : m_ostream(&m_streambuf), m_socket(socket) {}
+			explicit Response(const std::shared_ptr<socket_type> &socket) : m_socket(socket), m_ostream(&m_streambuf) {}
 
-			std::string statusToString(int status)
+			static std::string statusToString(int status)
 			{
 				switch (status) {
 					default:
@@ -170,11 +170,11 @@ namespace webpp {
                 }
             }
 
-            if(!io_context)
-                io_context=std::make_shared<asio::io_context>();
+            if(!m_io_context)
+                m_io_context=std::make_shared<asio::io_context>();
 
-            if(io_context->stopped())
-                io_context.reset();
+            if(m_io_context->stopped())
+                m_io_context.reset();
 
             asio::ip::tcp::endpoint endpoint;
             if(m_config.address.size()>0)
@@ -183,7 +183,7 @@ namespace webpp {
                 endpoint=asio::ip::tcp::endpoint(asio::ip::tcp::v4(), m_config.port);
             
             if(!acceptor)
-                acceptor= std::make_unique<asio::ip::tcp::acceptor>(*io_context);
+                acceptor= std::make_unique<asio::ip::tcp::acceptor>(*m_io_context);
             acceptor->open(endpoint.protocol());
             acceptor->set_option(asio::socket_base::reuse_address(m_config.reuse_address));
             acceptor->bind(endpoint);
@@ -191,12 +191,15 @@ namespace webpp {
      
             accept(); 
             
-            io_context->run();
+			if (!m_external_context)
+				m_io_context->run();
         }
         
-        void stop() {
+        void stop() const
+        {
             acceptor->close();
-            io_context->stop();
+			if (!m_external_context)
+				m_io_context->stop();
         }
         
         ///Use this function if you need to recursively send parts of a longer message
@@ -207,10 +210,14 @@ namespace webpp {
             });
         }
 
-        /// If you have your own asio::io_context, store its pointer here before running start().
-        /// You might also want to set config.num_threads to 0.
-        std::shared_ptr<asio::io_context> io_context;
-    protected:
+		void set_io_context(std::shared_ptr<asio::io_context> new_io_context)
+        {
+			m_io_context = new_io_context;
+			m_external_context = true;
+        }
+	protected:
+		std::shared_ptr<asio::io_context> m_io_context;
+		bool m_external_context;
         std::unique_ptr<asio::ip::tcp::acceptor> acceptor;
         std::vector<std::thread> threads;
         
@@ -218,12 +225,14 @@ namespace webpp {
         long timeout_content;
         
         ServerBase(unsigned short port, long timeout_request, long timeout_send_or_receive) :
-                m_config(port), timeout_request(timeout_request), timeout_content(timeout_send_or_receive) {}
-        
+		    m_config(port), m_external_context(false), timeout_request(timeout_request), timeout_content(timeout_send_or_receive)
+	    {
+	    }
+
         virtual void accept()=0;
         
         std::shared_ptr<asio::system_timer> set_timeout_on_socket(const std::shared_ptr<socket_type> &socket, long seconds) {
-            auto timer = std::make_shared<asio::system_timer>(*io_context);
+            auto timer = std::make_shared<asio::system_timer>(*m_io_context);
             timer->expires_at(std::chrono::system_clock::now() + std::chrono::seconds(seconds));
             timer->async_wait([socket](const std::error_code& ec){
                 if(!ec) {
@@ -438,7 +447,7 @@ namespace webpp {
         void accept() override {
             //Create new socket for this connection
             //Shared_ptr is used to pass temporary objects to the asynchronous functions
-            auto socket = std::make_shared<HTTP>(*io_context);
+            auto socket = std::make_shared<HTTP>(*m_io_context);
                         
             acceptor->async_accept(*socket, [this, socket](const std::error_code& ec){
                 //Immediately start accepting a new connection (if io_context hasn't been stopped)
