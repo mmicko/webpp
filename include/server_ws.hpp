@@ -158,8 +158,7 @@ namespace webpp {
         class Config {
             friend class SocketServerBase<socket_type>;
 
-            Config(unsigned short port, size_t num_threads): num_threads(num_threads), port(port), reuse_address(true) {}
-            size_t num_threads;
+            Config(unsigned short port): port(port), reuse_address(true) {}
         public:
             unsigned short port;
             ///IPv4 address in dotted decimal form or IPv6 address in hexadecimal notation.
@@ -204,27 +203,12 @@ namespace webpp {
             
             accept();
             
-            //If num_threads>1, start m_io_context.run() in (num_threads-1) threads for thread-pooling
-            threads.clear();
-            for(size_t c=1;c<config.num_threads;c++) {
-                threads.emplace_back([this](){
-                    io_context->run();
-                });
-            }
-            //Main thread
-            if(config.num_threads>0)
-                io_context->run();
-
-            //Wait for the rest of the threads, if any, to finish as well
-            for(auto& t: threads) {
-                t.join();
-            }
+            io_context->run();
         }
         
         void stop() {
             acceptor->close();
-            if(config.num_threads>0)
-                io_context->stop();
+            io_context->stop();
             
             for(auto& p: endpoint)
                 p.second.connections.clear();
@@ -309,8 +293,8 @@ namespace webpp {
         size_t timeout_request;
         size_t timeout_idle;
         
-        SocketServerBase(unsigned short port, size_t num_threads, size_t timeout_request, size_t timeout_idle) : 
-                config(port, num_threads), timeout_request(timeout_request), timeout_idle(timeout_idle) {}
+        SocketServerBase(unsigned short port, size_t timeout_request, size_t timeout_idle) : 
+                config(port), timeout_request(timeout_request), timeout_idle(timeout_idle) {}
         
         virtual void accept()=0;
         
@@ -631,8 +615,8 @@ namespace webpp {
     template<class socket_type>
     class SocketServer : public SocketServerBase<socket_type> {
     public:
-	    SocketServer(unsigned short port, size_t num_threads, size_t timeout_request, size_t timeout_idle)
-		    : SocketServerBase<socket_type>(port, num_threads, timeout_request, timeout_idle)
+	    SocketServer(unsigned short port, size_t timeout_request, size_t timeout_idle)
+		    : SocketServerBase<socket_type>(port, timeout_request, timeout_idle)
 	    {
 	    }
     };
@@ -642,8 +626,8 @@ namespace webpp {
     template<>
     class SocketServer<WS> : public SocketServerBase<WS> {
     public:
-	    explicit SocketServer(unsigned short port, size_t num_threads=1, size_t timeout_request=5, size_t timeout_idle=0) : 
-                SocketServerBase(port, num_threads, timeout_request, timeout_idle) {};
+	    explicit SocketServer(unsigned short port, size_t timeout_request=5, size_t timeout_idle=0) : 
+                SocketServerBase(port, timeout_request, timeout_idle) {};
         
     protected:
         void accept() override {

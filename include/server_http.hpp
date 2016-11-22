@@ -121,8 +121,7 @@ namespace webpp {
         class Config {
             friend class ServerBase<socket_type>;
 
-            Config(unsigned short port, size_t num_threads): num_threads(num_threads), port(port), reuse_address(true) {}
-            size_t num_threads;
+            Config(unsigned short port): port(port), reuse_address(true) {}
         public:
             unsigned short port;
             ///IPv4 address in dotted decimal form or IPv6 address in hexadecimal notation.
@@ -192,28 +191,12 @@ namespace webpp {
      
             accept(); 
             
-            //If num_threads>1, start m_io_context.run() in (num_threads-1) threads for thread-pooling
-            threads.clear();
-            for(size_t c=1;c<m_config.num_threads;c++) {
-                threads.emplace_back([this](){
-                    io_context->run();
-                });
-            }
-
-            //Main thread
-            if(m_config.num_threads>0)
-                io_context->run();
-
-            //Wait for the rest of the threads, if any, to finish as well
-            for(auto& t: threads) {
-                t.join();
-            }
+            io_context->run();
         }
         
         void stop() {
             acceptor->close();
-            if(m_config.num_threads>0)
-                io_context->stop();
+            io_context->stop();
         }
         
         ///Use this function if you need to recursively send parts of a longer message
@@ -234,8 +217,8 @@ namespace webpp {
         long timeout_request;
         long timeout_content;
         
-        ServerBase(unsigned short port, size_t num_threads, long timeout_request, long timeout_send_or_receive) :
-                m_config(port, num_threads), timeout_request(timeout_request), timeout_content(timeout_send_or_receive) {}
+        ServerBase(unsigned short port, long timeout_request, long timeout_send_or_receive) :
+                m_config(port), timeout_request(timeout_request), timeout_content(timeout_send_or_receive) {}
         
         virtual void accept()=0;
         
@@ -448,8 +431,8 @@ namespace webpp {
     template<>
     class Server<HTTP> : public ServerBase<HTTP> {
     public:
-	    explicit Server(unsigned short port, size_t num_threads=1, long timeout_request=5, long timeout_content=300) :
-                ServerBase(port, num_threads, timeout_request, timeout_content) {}
+	    explicit Server(unsigned short port, long timeout_request=5, long timeout_content=300) :
+                ServerBase(port, timeout_request, timeout_content) {}
         
     protected:
         void accept() override {

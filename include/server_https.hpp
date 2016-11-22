@@ -10,10 +10,10 @@ namespace webpp {
     template<>
     class Server<HTTPS> : public ServerBase<HTTPS> {
     public:
-        Server(unsigned short port, size_t num_threads, const std::string& cert_file, const std::string& private_key_file,
+        Server(unsigned short port, const std::string& cert_file, const std::string& private_key_file,
                 long timeout_request=5, long timeout_content=300,
                 const std::string& verify_file=std::string()) : 
-                ServerBase(port, num_threads, timeout_request, timeout_content), 
+                ServerBase(port, timeout_request, timeout_content), 
                 context(asio::ssl::context::tlsv12) { // 2016/08/13 only use tls12, see https://www.ssllabs.com/ssltest
             context.use_certificate_chain_file(cert_file);
             context.use_private_key_file(private_key_file, asio::ssl::context::pem);
