@@ -28,8 +28,6 @@ namespace webpp {
             
             if(verify_file.size()>0)
                 m_context.load_verify_file(verify_file);
-            
-			socket = std::unique_ptr<HTTPS>(new HTTPS(io_context, m_context));
         }
 
     protected:
@@ -42,6 +40,8 @@ namespace webpp {
 				resolver.async_resolve(query, [this]
 				(const std::error_code &ec, asio::ip::tcp::resolver::iterator it) {
 					if (!ec) {
+						socket = std::unique_ptr<HTTPS>(new HTTPS(io_context, m_context));
+
 						asio::async_connect(socket->lowest_layer(), it, [this]
 						(const std::error_code &ec, asio::ip::tcp::resolver::iterator /*it*/) {
 							if (!ec) {
