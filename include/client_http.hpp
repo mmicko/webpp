@@ -152,7 +152,13 @@ namespace webpp {
             
             return request_read();
         }
-        
+		void close() {
+			if (socket) {
+				std::error_code ec;
+				socket->lowest_layer().shutdown(asio::ip::tcp::socket::shutdown_both, ec);
+				socket->lowest_layer().close();
+			}
+		}
     protected:
         asio::io_context io_context;
         asio::ip::tcp::endpoint endpoint;
@@ -188,9 +194,7 @@ namespace webpp {
 			timer->expires_from_now(std::chrono::seconds(config.timeout));
 			timer->async_wait([this](const std::error_code& ec) {
 				if (!ec) {
-					std::error_code ec;
-					socket->lowest_layer().shutdown(asio::ip::tcp::socket::shutdown_both, ec);
-					socket->lowest_layer().close();
+					close();
 				}
 			});
 			return timer;
