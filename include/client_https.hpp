@@ -38,7 +38,6 @@ namespace webpp {
 		}		
         void connect() override {
             if(!socket || !socket->lowest_layer().is_open()) {
-                asio::ip::tcp::resolver resolver(io_context);
 				std::string host, port;
 				if (config.proxy_server.empty()) {
 					host = this->host;
@@ -51,14 +50,15 @@ namespace webpp {
 				}
 				asio::ip::tcp::resolver::query query(host, port);
 				resolver.async_resolve(query, [this]
-				(const std::error_code &ec, asio::ip::tcp::resolver::iterator it) {
+							(const std::error_code &ec, asio::ip::tcp::resolver::iterator it) {
 					if (!ec) {
 						{
 							std::lock_guard<std::mutex> lock(socket_mutex);
 							socket = std::unique_ptr<HTTPS>(new HTTPS(io_context, m_context));
 						}
+						
 						asio::async_connect(socket->lowest_layer(), it, [this]
-						(const std::error_code &ec, asio::ip::tcp::resolver::iterator /*it*/) {
+								(const std::error_code &ec, asio::ip::tcp::resolver::iterator /*it*/) {
 							if (!ec) {
 								asio::ip::tcp::no_delay option(true);
 								socket->lowest_layer().set_option(option);
@@ -83,6 +83,7 @@ namespace webpp {
 						});
 					}
 					else {
+						std::lock_guard<std::mutex> lock(socket_mutex);
 						socket = nullptr;
 						throw std::system_error(ec);
 					}

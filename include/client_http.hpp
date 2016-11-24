@@ -91,8 +91,7 @@ namespace webpp {
 
 			auto timer = get_timeout_timer();
 			asio::async_write(*socket, write_buffer,
-				[this, &content, timer](const std::error_code &ec, size_t /*bytes_transferred*/)
-			{
+				[this, &content, timer](const std::error_code &ec, size_t /*bytes_transferred*/) {
 				if (timer)
 					timer->cancel();
 				if (!ec) {
@@ -381,7 +380,6 @@ namespace webpp {
 
         void connect() override {
             if(!socket || !socket->is_open()) {
-                asio::ip::tcp::resolver resolver(io_context);
 				std::string host, port;
 				if (config.proxy_server.empty()) {
 					host = this->host;
@@ -393,13 +391,15 @@ namespace webpp {
 					port = std::to_string(proxy_host_port.second);					
 				}
 				asio::ip::tcp::resolver::query query(host, port);
-                resolver.async_resolve(query, [this](const std::error_code &ec,
+               
+				resolver.async_resolve(query, [this](const std::error_code &ec,
                                                       asio::ip::tcp::resolver::iterator it){
                     if(!ec) {
 						{
 							std::lock_guard<std::mutex> lock(socket_mutex);
 							socket = std::unique_ptr<HTTP>(new HTTP(io_context));
 						}
+
                         asio::async_connect(*socket, it, [this]
                                 (const std::error_code &ec, asio::ip::tcp::resolver::iterator /*it*/){
                             if(!ec) {
