@@ -283,8 +283,6 @@ namespace webpp {
                     //If content, read that as well
                     auto it=request->header.find("Content-Length");
                     if(it!=request->header.end()) {
-                        //Set timeout on the following asio::async-read or write function
-						auto timer2 = get_timeout_timer(socket, timeout_request);
                         unsigned long long content_length;
                         try {
                             content_length=stoull(it->second);
@@ -295,6 +293,8 @@ namespace webpp {
                             return;
                         }
                         if(content_length>num_additional_bytes) {
+							//Set timeout on the following asio::async-read or write function
+							auto timer2 = get_timeout_timer(socket, timeout_request);
                             asio::async_read(*socket, request->streambuf,
                                     asio::transfer_exactly(size_t(content_length)-num_additional_bytes),
                                     [this, socket, request, timer2]
@@ -306,8 +306,6 @@ namespace webpp {
                             });
                         }
                         else {
-                            if(timer2)
-                                timer2->cancel();
                             find_resource(socket, request);
                         }
                     }
@@ -395,9 +393,9 @@ namespace webpp {
             auto response=std::shared_ptr<Response>(new Response(socket), [this, request, timer](Response *response_ptr) {
                 auto response=std::shared_ptr<Response>(response_ptr);
                 send(response, [this, response, request, timer](const std::error_code& ec) {
-                    if(!ec) {
-                        if(timer)
-                            timer->cancel();
+					if (timer)
+						timer->cancel();
+					if(!ec) {
                         float http_version;
                         try {
                             http_version=stof(request->http_version);
