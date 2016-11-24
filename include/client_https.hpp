@@ -40,8 +40,10 @@ namespace webpp {
 				resolver.async_resolve(query, [this]
 				(const std::error_code &ec, asio::ip::tcp::resolver::iterator it) {
 					if (!ec) {
-						socket = std::unique_ptr<HTTPS>(new HTTPS(io_context, m_context));
-
+						{
+							std::lock_guard<std::mutex> lock(socket_mutex);
+							socket = std::unique_ptr<HTTPS>(new HTTPS(io_context, m_context));
+						}
 						asio::async_connect(socket->lowest_layer(), it, [this]
 						(const std::error_code &ec, asio::ip::tcp::resolver::iterator /*it*/) {
 							if (!ec) {
@@ -54,12 +56,14 @@ namespace webpp {
 									if (timer)
 										timer->cancel();
 									if (ec) {
+										std::lock_guard<std::mutex> lock(socket_mutex);
 										socket = nullptr;
 										throw std::system_error(ec);
 									}
 								});
 							}
 							else {
+								std::lock_guard<std::mutex> lock(socket_mutex);
 								socket = nullptr;
 								throw std::system_error(ec);
 							}

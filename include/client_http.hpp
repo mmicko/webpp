@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <map>
 #include <random>
+#include <mutex>
 
 namespace webpp {
     template <class socket_type>
@@ -98,6 +99,7 @@ namespace webpp {
 							if (timer)
 								timer->cancel();
 							if (ec) {
+								std::lock_guard<std::mutex> lock(socket_mutex);
 								socket = nullptr;
 								throw std::system_error(ec);
 							}
@@ -105,6 +107,7 @@ namespace webpp {
 					}
 				}
 				else {
+					std::lock_guard<std::mutex> lock(socket_mutex);
 					socket = nullptr;
 					throw std::system_error(ec);
 				}
@@ -143,6 +146,7 @@ namespace webpp {
 				if (timer)
 					timer->cancel();
 				if (ec) {
+					std::lock_guard<std::mutex> lock(socket_mutex);
 					socket = nullptr;
 					throw std::system_error(ec);
 				}
@@ -153,6 +157,7 @@ namespace webpp {
             return request_read();
         }
 		void close() {
+			std::lock_guard<std::mutex> lock(socket_mutex);
 			if (socket) {
 				std::error_code ec;
 				socket->lowest_layer().shutdown(asio::ip::tcp::socket::shutdown_both, ec);
@@ -165,7 +170,8 @@ namespace webpp {
         asio::ip::tcp::resolver resolver;
         
         std::unique_ptr<socket_type> socket;
-        
+		std::mutex socket_mutex;
+
         std::string host;
         unsigned short port;
                 
@@ -252,6 +258,7 @@ namespace webpp {
 								if (timer)
 									timer->cancel();
 								if (ec) {
+									std::lock_guard<std::mutex> lock(socket_mutex);
 									socket = nullptr;
 									throw std::system_error(ec);
 								}
@@ -263,6 +270,7 @@ namespace webpp {
 					}
 				}
 				else {
+					std::lock_guard<std::mutex> lock(socket_mutex);
 					socket = nullptr;
 					throw std::system_error(ec);
 				}
@@ -317,6 +325,7 @@ namespace webpp {
 								post_process();
 							}
 							else {
+								std::lock_guard<std::mutex> lock(socket_mutex);
 								socket = nullptr;
 								throw std::system_error(ec);
 							}
@@ -326,6 +335,7 @@ namespace webpp {
 						post_process();
 				}
 				else {
+					std::lock_guard<std::mutex> lock(socket_mutex);
 					socket = nullptr;
 					throw std::system_error(ec);
 				}
@@ -357,8 +367,10 @@ namespace webpp {
                 resolver.async_resolve(query, [this](const std::error_code &ec,
                                                       asio::ip::tcp::resolver::iterator it){
                     if(!ec) {
-                        socket=std::unique_ptr<HTTP>(new HTTP(io_context));
-                        
+						{
+							std::lock_guard<std::mutex> lock(socket_mutex);
+							socket = std::unique_ptr<HTTP>(new HTTP(io_context));
+						}
                         asio::async_connect(*socket, it, [this]
                                 (const std::error_code &ec, asio::ip::tcp::resolver::iterator /*it*/){
                             if(!ec) {
@@ -366,12 +378,14 @@ namespace webpp {
                                 socket->set_option(option);
                             }
                             else {
+								std::lock_guard<std::mutex> lock(socket_mutex);
                                 socket=nullptr;
                                 throw std::system_error(ec);
                             }
                         });
                     }
                     else {
+						std::lock_guard<std::mutex> lock(socket_mutex);
                         socket=nullptr;
                         throw std::system_error(ec);
                     }
