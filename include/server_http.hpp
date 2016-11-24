@@ -277,7 +277,7 @@ namespace webpp {
                     //streambuf (maybe some bytes of the content) is appended to in the async_read-function below (for retrieving content).
                     size_t num_additional_bytes=request->streambuf.size()-bytes_transferred;
                     
-                    if(!parse_request(request, request->content))
+                    if(!parse_request(request))
                         return;
                     
                     //If content, read that as well
@@ -316,9 +316,9 @@ namespace webpp {
             });
         }
 
-        bool parse_request(const std::shared_ptr<Request> &request, std::istream& stream) const {
+        bool parse_request(const std::shared_ptr<Request> &request) const {
             std::string line;
-            getline(stream, line);
+            getline(request->content, line);
             size_t method_end;
             if((method_end=line.find(' '))!=std::string::npos) {
                 size_t path_end;
@@ -335,7 +335,7 @@ namespace webpp {
                     else
                         return false;
 
-                    getline(stream, line);
+                    getline(request->content, line);
                     size_t param_end;
                     while((param_end=line.find(':'))!=std::string::npos) {
                         size_t value_start=param_end+1;
@@ -346,7 +346,7 @@ namespace webpp {
                                 request->header.insert(make_pair(line.substr(0, param_end), line.substr(value_start, line.size()-value_start-1)));
                         }
     
-                        getline(stream, line);
+                        getline(request->content, line);
                     }
                 }
                 else
