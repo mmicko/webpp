@@ -96,11 +96,11 @@ namespace webpp {
 					timer->cancel();
 				if (!ec) {
 					if (!content.empty()) {
-						auto timer = get_timeout_timer();
+						auto timer2 = get_timeout_timer();
 						asio::async_write(*socket, asio::buffer(content.data(), content.size()),
-							[this,timer](const std::error_code &ec, size_t /*bytes_transferred*/) {
-							if (timer)
-								timer->cancel();
+							[this,timer2](const std::error_code &ec, size_t /*bytes_transferred*/) {
+							if (timer2)
+								timer2->cancel();
 							if (ec) {
 								std::lock_guard<std::mutex> lock(socket_mutex);
 								socket = nullptr;
@@ -187,7 +187,8 @@ namespace webpp {
 			port = parsed_host_port.second;
 		}
 
-		std::pair<std::string, unsigned short> parse_host_port(const std::string &host_port, unsigned short default_port) {
+		std::pair<std::string, unsigned short> parse_host_port(const std::string &host_port, unsigned short default_port) const
+		{
 			std::pair<std::string, unsigned short> parsed_host_port;
             size_t host_end=host_port.find(':');
             if(host_end==std::string::npos) {
@@ -263,12 +264,12 @@ namespace webpp {
 					if (header_it != response->header.end()) {
 						auto content_length = stoull(header_it->second);
 						if (content_length>num_additional_bytes) {
-							auto timer = get_timeout_timer();
+							auto timer2 = get_timeout_timer();
 							asio::async_read(*socket, response->content_buffer,
 								asio::transfer_exactly(size_t(content_length) - num_additional_bytes),
-								[this,timer](const std::error_code& ec, size_t /*bytes_transferred*/) {
-								if (timer)
-									timer->cancel();
+								[this,timer2](const std::error_code& ec, size_t /*bytes_transferred*/) {
+								if (timer2)
+									timer2->cancel();
 								if (ec) {
 									std::lock_guard<std::mutex> lock(socket_mutex);
 									socket = nullptr;
@@ -304,7 +305,7 @@ namespace webpp {
 					getline(response->content, line);
 					bytes_transferred -= line.size() + 1;
 					line.pop_back();
-					std::streamsize length = stol(line, 0, 16);
+					std::streamsize length = stol(line, nullptr, 16);
 
 					auto num_additional_bytes = static_cast<std::streamsize>(response->content_buffer.size() - bytes_transferred);
 
@@ -329,12 +330,12 @@ namespace webpp {
 					};
 
 					if ((2 + length)>num_additional_bytes) {
-						auto timer = get_timeout_timer();
+						auto timer2 = get_timeout_timer();
 						asio::async_read(*socket, response->content_buffer,
 							asio::transfer_exactly(size_t(2 + length) - size_t(num_additional_bytes)),
-							[this, post_process, timer](const std::error_code& ec, size_t /*bytes_transferred*/) {
-							if (timer)
-								timer->cancel();
+							[this, post_process, timer2](const std::error_code& ec, size_t /*bytes_transferred*/) {
+							if (timer2)
+								timer2->cancel();
 							if (!ec) {
 								post_process();
 							}
@@ -374,7 +375,8 @@ namespace webpp {
 		explicit Client(const std::string& server_port_path) : ClientBase(server_port_path, 80) { }
         
     protected:
-		std::string protocol() {
+		std::string protocol() override
+		{
 			return "http";
 		}
 

@@ -33,7 +33,8 @@ namespace webpp {
     protected:
         asio::ssl::context m_context;
 		
-		std::string protocol() {
+		std::string protocol() override
+		{
 			return "https";
 		}		
         void connect() override {

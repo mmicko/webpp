@@ -22,7 +22,6 @@
 
 #include <map>
 #include <regex>
-#include <string>
 #include <vector>
 
 namespace path2regex {

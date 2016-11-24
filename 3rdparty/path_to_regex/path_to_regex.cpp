@@ -64,7 +64,7 @@ std::vector<Token> parse(const std::string& str) {
       continue;
     }
 
-    std::string next = ((size_t) index < str.size()) ? std::string{str.at(index)} : "";
+    std::string next = (size_t(index) < str.size()) ? std::string{str.at(index)} : "";
 
     std::string prefix = res[4];  // f.ex. /
     std::string name = res[5];    // f.ex. test
@@ -108,7 +108,7 @@ std::vector<Token> parse(const std::string& str) {
   }
 
   // Match any characters still remaining
-  if ((size_t) index < str.size())
+  if (size_t(index) < str.size())
     path += str.substr(index);
 
   // If the path exists, push it onto the end
