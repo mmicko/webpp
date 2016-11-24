@@ -32,11 +32,24 @@ namespace webpp {
 
     protected:
         asio::ssl::context m_context;
-        
+		
+		std::string protocol() {
+			return "https";
+		}		
         void connect() override {
             if(!socket || !socket->lowest_layer().is_open()) {
                 asio::ip::tcp::resolver resolver(io_context);
-				asio::ip::tcp::resolver::query query(host, std::to_string(port));
+				std::string host, port;
+				if (config.proxy_server.empty()) {
+					host = this->host;
+					port = std::to_string(this->port);
+				}
+				else {
+					auto proxy_host_port = parse_host_port(config.proxy_server, 0);
+					host = proxy_host_port.first;
+					port = std::to_string(proxy_host_port.second);
+				}
+				asio::ip::tcp::resolver::query query(host, port);
 				resolver.async_resolve(query, [this]
 				(const std::error_code &ec, asio::ip::tcp::resolver::iterator it) {
 					if (!ec) {
