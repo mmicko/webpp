@@ -69,20 +69,29 @@ namespace webpp {
             if(content.size()>0)
                 write_stream << "Content-Length: " << content.size() << "\r\n";
             write_stream << "\r\n";
-            
-            try {
-                connect();
-                
-                asio::write(*socket, write_buffer);
-                if(content.size()>0)
-                    asio::write(*socket, asio::buffer(content.data(), content.size()));
-                
-            }
-            catch(const std::exception& e) {
-                socket_error=true;
-                throw std::invalid_argument(e.what());
-            }
-            
+           			
+			connect();
+
+			asio::async_write(*socket, write_buffer,
+				[this, &content](const std::error_code &ec, size_t /*bytes_transferred*/) {
+				if (!ec) {
+					if (!content.empty()) {
+						asio::async_write(*socket, asio::buffer(content.data(), content.size()),
+							[this](const std::error_code &ec, size_t /*bytes_transferred*/) {
+							if (ec) {
+								socket = nullptr;
+								throw std::system_error(ec);
+							}
+						});
+					}
+				}
+				else {
+					socket = nullptr;
+					throw std::system_error(ec);
+				}
+			});
+			io_context.reset();
+			io_context.run();
             return request_read();
         }
         
@@ -109,15 +118,15 @@ namespace webpp {
             if(content_length>0)
                 write_stream << content.rdbuf();
             
-            try {
-                connect();
-                
-                asio::write(*socket, write_buffer);
-            }
-            catch(const std::exception& e) {
-                socket_error=true;
-                throw std::invalid_argument(e.what());
-            }
+			asio::async_write(*socket, write_buffer,
+				[this](const std::error_code &ec, size_t /*bytes_transferred*/) {
+				if (ec) {
+					socket = nullptr;
+					throw std::system_error(ec);
+				}
+			});
+			io_service.reset();
+			io_service.run();
             
             return request_read();
         }
@@ -127,14 +136,13 @@ namespace webpp {
         asio::ip::tcp::endpoint endpoint;
         asio::ip::tcp::resolver resolver;
         
-        std::shared_ptr<socket_type> socket;
-        bool socket_error;
+        std::unique_ptr<socket_type> socket;
         
         std::string host;
         unsigned short port;
                 
         ClientBase(const std::string& host_port, unsigned short default_port) : 
-                resolver(io_context), socket_error(false) {
+                resolver(io_context) {
             size_t host_end=host_port.find(':');
             if(host_end==std::string::npos) {
                 host=host_port;
@@ -150,9 +158,9 @@ namespace webpp {
         
         virtual void connect()=0;
         
-        void parse_response_header(const std::shared_ptr<Response> &response, std::istream& stream) const {
+        void parse_response_header(const std::shared_ptr<Response> &response) const {
             std::string line;
-            getline(stream, line);
+            getline(response->content, line);
             size_t version_end=line.find(' ');
             if(version_end!=std::string::npos) {
                 if(5<line.size())
@@ -160,7 +168,7 @@ namespace webpp {
                 if((version_end+1)<line.size())
                     response->status_code=line.substr(version_end+1, line.size()-(version_end+1)-1);
 
-                getline(stream, line);
+                getline(response->content, line);
                 size_t param_end;
                 while((param_end=line.find(':'))!=std::string::npos) {
                     size_t value_start=param_end+1;
@@ -171,72 +179,106 @@ namespace webpp {
                             response->header.insert(std::make_pair(line.substr(0, param_end), line.substr(value_start, line.size()-value_start-1)));
                     }
 
-                    getline(stream, line);
+                    getline(response->content, line);
                 }
             }
         }
         
-        std::shared_ptr<Response> request_read() {
-            std::shared_ptr<Response> response(new Response());
-            
-            try {
-                size_t bytes_transferred = asio::read_until(*socket, response->content_buffer, "\r\n\r\n");
-                
-                size_t num_additional_bytes=response->content_buffer.size()-bytes_transferred;
-                
-                parse_response_header(response, response->content);
-                
-                auto header_it=response->header.find("Content-Length");
-                if(header_it!=response->header.end()) {
-                    auto content_length=stoull(header_it->second);
-                    if(content_length>num_additional_bytes) {
-                        asio::read(*socket, response->content_buffer, 
-                                asio::transfer_exactly(size_t(content_length)-num_additional_bytes));
-                    }
-                }
-                else if((header_it=response->header.find("Transfer-Encoding"))!=response->header.end() && header_it->second=="chunked") {
-                    asio::streambuf streambuf;
-                    std::ostream content(&streambuf);
-                    
-                    std::streamsize length;
-                    std::string buffer;
-                    do {
-                        size_t bytes_transferred2 = asio::read_until(*socket, response->content_buffer, "\r\n");
-                        std::string line;
-                        getline(response->content, line);
-                        bytes_transferred2-=line.size()+1;
-                        line.pop_back();
-                        length=stol(line, nullptr, 16);
-            
-                        auto num_additional_bytes2=static_cast<std::streamsize>(response->content_buffer.size()-bytes_transferred2);
-                    
-                        if((2+length)>num_additional_bytes2) {
-                            asio::read(*socket, response->content_buffer, 
-                                asio::transfer_exactly(size_t(2+length)-size_t(num_additional_bytes2)));
-                        }
+		std::shared_ptr<Response> request_read() {
+			std::shared_ptr<Response> response(new Response());
 
-                        buffer.resize(static_cast<size_t>(length));
-                        response->content.read(&buffer[0], length);
-                        content.write(&buffer[0], length);
-            
-                        //Remove "\r\n"
-                        response->content.get();
-                        response->content.get();
-                    } while(length>0);
-                    
-                    std::ostream response_content_output_stream(&response->content_buffer);
-                    response_content_output_stream << content.rdbuf();
-                }
-            }
-            catch(const std::exception& e) {
-                socket_error=true;
-                throw std::invalid_argument(e.what());
-            }
-            
-            return response;
-        }
-    };
-    
+			asio::streambuf chunked_streambuf;
+
+			asio::async_read_until(*socket, response->content_buffer, "\r\n\r\n",
+				[this, &response, &chunked_streambuf](const std::error_code& ec, size_t bytes_transferred) {
+				if (!ec) {
+					size_t num_additional_bytes = response->content_buffer.size() - bytes_transferred;
+
+					parse_response_header(response);
+
+					auto header_it = response->header.find("Content-Length");
+					if (header_it != response->header.end()) {
+						auto content_length = stoull(header_it->second);
+						if (content_length>num_additional_bytes) {
+							asio::async_read(*socket, response->content_buffer,
+								asio::transfer_exactly(size_t(content_length) - num_additional_bytes),
+								[this](const std::error_code& ec, size_t /*bytes_transferred*/) {
+								if (ec) {
+									socket = nullptr;
+									throw std::system_error(ec);
+								}
+							});
+						}
+					}
+					else if ((header_it = response->header.find("Transfer-Encoding")) != response->header.end() && header_it->second == "chunked") {
+						request_read_chunked(response, chunked_streambuf);
+					}
+				}
+				else {
+					socket = nullptr;
+					throw std::system_error(ec);
+				}
+			});
+			io_context.reset();
+			io_context.run();
+
+			return response;
+		}
+
+		void request_read_chunked(const std::shared_ptr<Response> &response, asio::streambuf &streambuf) {
+			asio::async_read_until(*socket, response->content_buffer, "\r\n",
+				[this, &response, &streambuf](const std::error_code& ec, size_t bytes_transferred) {
+				if (!ec) {
+					std::string line;
+					getline(response->content, line);
+					bytes_transferred -= line.size() + 1;
+					line.pop_back();
+					std::streamsize length = stol(line, 0, 16);
+
+					auto num_additional_bytes = static_cast<std::streamsize>(response->content_buffer.size() - bytes_transferred);
+
+					auto post_process = [this, &response, &streambuf, length] {
+						std::ostream stream(&streambuf);
+						std::vector<char> buffer(static_cast<size_t>(length));
+						response->content.read(&buffer[0], length);
+						stream.write(&buffer[0], length);
+
+						//Remove "\r\n"
+						response->content.get();
+						response->content.get();
+
+						if (length>0)
+							request_read_chunked(response, streambuf);
+						else {
+							std::ostream response_stream(&response->content_buffer);
+							response_stream << stream.rdbuf();
+						}
+					};
+
+					if ((2 + length)>num_additional_bytes) {
+						asio::async_read(*socket, response->content_buffer,
+							asio::transfer_exactly(size_t(2 + length) - size_t(num_additional_bytes)),
+							[this, post_process](const std::error_code& ec, size_t /*bytes_transferred*/) {
+							if (!ec) {
+								post_process();
+							}
+							else {
+								socket = nullptr;
+								throw std::system_error(ec);
+							}
+						});
+					}
+					else
+						post_process();
+				}
+				else {
+					socket = nullptr;
+					throw std::system_error(ec);
+				}
+			});
+		}
+	};
+	
     template<class socket_type>
     class Client : public ClientBase<socket_type> {
     public:
@@ -251,21 +293,38 @@ namespace webpp {
     template<>
     class Client<HTTP> : public ClientBase<HTTP> {
     public:
-	    explicit Client(const std::string& server_port_path) : ClientBase(server_port_path, 80) {
-            socket=std::make_shared<HTTP>(io_context);
-        }
+		explicit Client(const std::string& server_port_path) : ClientBase(server_port_path, 80) { }
         
     protected:
         void connect() override {
-            if(socket_error || !socket->is_open()) {
+            if(!socket || !socket->is_open()) {
                 asio::ip::tcp::resolver resolver(io_context);
-                asio::connect(*socket, resolver.resolve(host, std::to_string(port)));
-
-                asio::ip::tcp::no_delay option(true);
-                socket->set_option(option);
-                
-                socket_error=false;
-            }
+				asio::ip::tcp::resolver::query query(host, std::to_string(port));
+                resolver.async_resolve(query, [this](const std::error_code &ec,
+                                                      asio::ip::tcp::resolver::iterator it){
+                    if(!ec) {
+                        socket=std::unique_ptr<HTTP>(new HTTP(io_context));
+                        
+                        asio::async_connect(*socket, it, [this]
+                                (const std::error_code &ec, asio::ip::tcp::resolver::iterator /*it*/){
+                            if(!ec) {
+                                asio::ip::tcp::no_delay option(true);
+                                socket->set_option(option);
+                            }
+                            else {
+                                socket=nullptr;
+                                throw std::system_error(ec);
+                            }
+                        });
+                    }
+                    else {
+                        socket=nullptr;
+                        throw std::system_error(ec);
+                    }
+                });
+				io_context.reset();
+				io_context.run();       
+			}
         }
     };
 }

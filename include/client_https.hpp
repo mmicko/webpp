@@ -29,23 +29,46 @@ namespace webpp {
             if(verify_file.size()>0)
                 m_context.load_verify_file(verify_file);
             
-            socket=std::make_shared<HTTPS>(io_context, m_context);
+			socket = std::unique_ptr<HTTPS>(new HTTPS(io_context, m_context));
         }
 
     protected:
         asio::ssl::context m_context;
         
         void connect() override {
-            if(socket_error || !socket->lowest_layer().is_open()) {
+            if(!socket || !socket->lowest_layer().is_open()) {
                 asio::ip::tcp::resolver resolver(io_context);
-                asio::connect(socket->lowest_layer(), resolver.resolve(host, std::to_string(port)));
-                
-                asio::ip::tcp::no_delay option(true);
-                socket->lowest_layer().set_option(option);
-                
-                socket->handshake(asio::ssl::stream_base::client);
-                
-                socket_error=false;
+				asio::ip::tcp::resolver::query query(host, std::to_string(port));
+				resolver.async_resolve(query, [this]
+				(const std::error_code &ec, asio::ip::tcp::resolver::iterator it) {
+					if (!ec) {
+						asio::async_connect(socket->lowest_layer(), it, [this]
+						(const std::error_code &ec, asio::ip::tcp::resolver::iterator /*it*/) {
+							if (!ec) {
+								asio::ip::tcp::no_delay option(true);
+								socket->lowest_layer().set_option(option);
+
+								socket->async_handshake(asio::ssl::stream_base::client,
+									[this](const std::error_code& ec) {
+									if (ec) {
+										socket = nullptr;
+										throw std::system_error(ec);
+									}
+								});
+							}
+							else {
+								socket = nullptr;
+								throw std::system_error(ec);
+							}
+						});
+					}
+					else {
+						socket = nullptr;
+						throw std::system_error(ec);
+					}
+				});
+				io_context.reset();
+				io_context.run();
             }
         }
     };
