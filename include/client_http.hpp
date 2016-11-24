@@ -140,6 +140,8 @@ namespace webpp {
             if(content_length>0)
                 write_stream << content.rdbuf();
 			
+			connect();
+
 			auto timer = get_timeout_timer();
 			asio::async_write(*socket, write_buffer,
 				[this,timer](const std::error_code &ec, size_t /*bytes_transferred*/) {
