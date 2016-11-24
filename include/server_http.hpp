@@ -7,6 +7,7 @@
 
 #include "asio_wrapper.hpp"
 #include "asio/system_timer.hpp"
+#include "path_to_regex.hpp"
 
 #include <unordered_map>
 #include <thread>
@@ -107,7 +108,8 @@ namespace webpp {
 
             std::unordered_multimap<std::string, std::string, ihash, iequal_to> header;
 
-            std::smatch path_match;
+			path2regex::Keys keys;
+			std::map<std::string, std::string> parameters;
             
             std::string remote_endpoint_address;
             unsigned short remote_endpoint_port;
@@ -146,7 +148,7 @@ namespace webpp {
         
         std::function<void(const std::exception&)> m_exception_handler;
 
-        std::vector<std::pair<std::string, std::vector<std::pair<std::regex,http_handler>>>> m_opt_resource;
+        std::vector<std::pair<std::string, std::vector<std::tuple<std::regex, path2regex::Keys, http_handler>>>> m_opt_resource;
         
     public:
         void start() {
@@ -166,7 +168,9 @@ namespace webpp {
                         it=m_opt_resource.begin()+(m_opt_resource.size()-1);
                         it->first=res_method.first;
                     }
-                    it->second.emplace_back(std::regex(res.first), res_method.second);
+					path2regex::Keys keys;
+					std::regex regex = path2regex::path_to_regex(res.first, keys);
+                    it->second.emplace_back(std::make_tuple(std::move(regex), std::move(keys), res_method.second));
                 }
             }
 
@@ -363,9 +367,12 @@ namespace webpp {
                 if(request->method==res.first) {
                     for(auto& res_path: res.second) {
                         std::smatch sm_res;
-                        if(std::regex_match(request->path, sm_res, res_path.first)) {
-                            request->path_match=move(sm_res);
-                            write_response(socket, request, res_path.second);
+                        if(std::regex_match(request->path, sm_res, std::get<0>(res_path))) {
+							request->keys = std::get<1>(res_path);							
+							for (size_t i = 0; i < request->keys.size(); i++) {
+								request->parameters.insert(std::pair<std::string,std::string>(request->keys[i].name, sm_res[i + 1]));
+							}
+                            write_response(socket, request, std::get<2>(res_path));
                             return;
                         }
                     }

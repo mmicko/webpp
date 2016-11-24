@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.0)
 project(webpp)
 include_directories(include)
 include_directories(3rdparty/asio/include)
+include_directories(3rdparty/path_to_regex)
 
 find_package(Threads REQUIRED)
 

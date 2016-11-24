@@ -8,7 +8,6 @@ using HttpServer = webpp::Server<webpp::HTTP>;
 using HttpClient = webpp::Client<webpp::HTTP>;
 
 int main() {
-
 	std::shared_ptr<asio::io_context> io_context = std::make_shared<asio::io_context>();
     //HTTP-server at port 8080 using 1 thread
     //Unless you do more heavy non-threaded processing in the resources,
@@ -19,7 +18,7 @@ int main() {
     
 	//Add resources using path-regex and method-string, and an anonymous function
     //POST-example for the path /string, responds the posted string
-    server.on_post("^/string$", [](auto response, auto request) {
+    server.on_post("/string", [](auto response, auto request) {
         //Retrieve string:
         auto content=request->content.string();
 		response->status(200).send(content);
@@ -33,7 +32,7 @@ int main() {
     //  "lastName": "Smith",
     //  "age": 25
     //}
-    server.on_post("^/json$", [](auto response, auto /*request*/) {
+    server.on_post("/json", [](auto response, auto /*request*/) {
         try {
 
 			std::string name="Test Name ";
@@ -47,7 +46,7 @@ int main() {
 
     //GET-example for the path /info
     //Responds with request-information
-    server.on_get("^/info$", [](auto response, auto request) {
+    server.on_get("/info", [](auto response, auto request) {
 		std::stringstream content_stream;
         content_stream << "<h1>Request from " << request->remote_endpoint_address << " (" << request->remote_endpoint_port << ")</h1>";
         content_stream << request->method << " " << request->path << " HTTP/" << request->http_version << "<br>";
@@ -60,13 +59,13 @@ int main() {
     
     //GET-example for the path /match/[number], responds with the matched string in path (number)
     //For instance a request GET /match/123 will receive: 123
-    server.on_get("^/match/([0-9]+)$", [&server](auto response, auto request) {
-		std::string number=request->path_match[1];
+    server.on_get("/match/:id(\\d+)", [&server](auto response, auto request) {
+		std::string number = request->parameters["id"];
 		response->status(200).send(number);
     });
     
     //Get example simulating heavy work in a separate thread
-    server.on_get("^/work$", [&server](auto response, auto /*request*/) {
+    server.on_get("/work", [&server](auto response, auto /*request*/) {
 		std::thread work_thread([response] {
 			std::this_thread::sleep_for(std::chrono::seconds(5));
 			std::string message="Work done";
