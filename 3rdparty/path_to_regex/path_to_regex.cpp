@@ -59,7 +59,7 @@ std::vector<Token> parse(const std::string& str) {
 
     index = offset + m.size();
 
-    if (not escaped.empty()) {
+    if (!escaped.empty()) {
       path += escaped[1];   // if escaped == \a, escaped[1] == a (if str is "/\\a" f.ex.)
       continue;
     }
@@ -74,28 +74,28 @@ std::vector<Token> parse(const std::string& str) {
     std::string asterisk = res[9];  // * if path is /*
 
     // Push the current path onto the tokens
-    if (not path.empty()) {
+    if (!path.empty()) {
       Token stringToken;
       stringToken.set_string_token(path);
       tokens.push_back(stringToken);
       path = "";
     }
 
-    bool partial = (not prefix.empty()) and (not next.empty()) and (next not_eq prefix);
-    bool repeat = (modifier == "+") or (modifier == "*");
-    bool optional = (modifier == "?") or (modifier == "*");
-    std::string delimiter = (not prefix.empty()) ? prefix : "/";
+    bool partial = (!prefix.empty()) && (!next.empty()) && (next != prefix);
+    bool repeat = (modifier == "+") || (modifier == "*");
+    bool optional = (modifier == "?") || (modifier == "*");
+    std::string delimiter = (!prefix.empty()) ? prefix : "/";
     std::string pattern;
 
-    if (not capture.empty())
+    if (!capture.empty())
       pattern = capture;
-    else if (not group.empty())
+    else if (!group.empty())
       pattern = group;
     else
-      pattern = (not asterisk.empty()) ? ".*" : ("[^" + delimiter + "]+?");
+      pattern = (!asterisk.empty()) ? ".*" : ("[^" + delimiter + "]+?");
 
     Token t;
-    t.name = (not name.empty()) ? name : std::to_string(key++);
+    t.name = (!name.empty()) ? name : std::to_string(key++);
     t.prefix = prefix;
     t.delimiter = delimiter;
     t.optional = optional;
@@ -112,7 +112,7 @@ std::vector<Token> parse(const std::string& str) {
     path += str.substr(index);
 
   // If the path exists, push it onto the end
-  if (not path.empty()) {
+  if (!path.empty()) {
     Token stringToken;
     stringToken.set_string_token(path);
     tokens.push_back(stringToken);
@@ -131,21 +131,21 @@ std::regex tokens_to_regex(const Tokens& tokens, const Options& options) {
   bool sensitive = false;
   bool end = true;
 
-  if (not options.empty()) {
+  if (!options.empty()) {
     auto it = options.find("strict");
-    strict = (it not_eq options.end()) ? options.find("strict")->second : false;
+    strict = (it != options.end()) ? options.find("strict")->second : false;
 
     it = options.find("sensitive");
-    sensitive = (it not_eq options.end()) ? options.find("sensitive")->second : false;
+    sensitive = (it != options.end()) ? options.find("sensitive")->second : false;
 
     it = options.find("end");
-    end = (it not_eq options.end()) ? options.find("end")->second : true;
+    end = (it != options.end()) ? options.find("end")->second : true;
   }
 
   std::string route = "";
   Token lastToken = tokens[tokens.size() - 1];
   std::regex re{"(.*\\/$)"};
-  bool endsWithSlash = lastToken.is_string and std::regex_match(lastToken.name, re);
+  bool endsWithSlash = lastToken.is_string && std::regex_match(lastToken.name, re);
   // endsWithSlash if the last char in lastToken's name is a slash
 
   // Iterate over the tokens and create our regexp string
@@ -163,7 +163,7 @@ std::regex tokens_to_regex(const Tokens& tokens, const Options& options) {
 
       if (token.optional) {
 
-        if (not token.partial)
+        if (!token.partial)
           capture = "(?:" + prefix + "(" + capture + "))?";
         else
           capture = prefix + "(" + capture + ")?";
@@ -181,7 +181,7 @@ std::regex tokens_to_regex(const Tokens& tokens, const Options& options) {
   // is valid at the end of a path match, not in the middle. This is important
   // in non-ending mode, where "/test/" shouldn't match "/test//route".
 
-  if (not strict) {
+  if (!strict) {
     if (endsWithSlash)
       route = route.substr(0, (route.size() - 1));
 
@@ -193,7 +193,7 @@ std::regex tokens_to_regex(const Tokens& tokens, const Options& options) {
   } else {
     // In non-ending mode, we need the capturing groups to match as much as
     // possible by using a positive lookahead to the end or next path segment
-    if (not (strict and endsWithSlash))
+    if (!(strict && endsWithSlash))
       route += "(?=\\/|$)";
   }
 
@@ -205,7 +205,7 @@ std::regex tokens_to_regex(const Tokens& tokens, const Options& options) {
 
 void tokens_to_keys(const Tokens& tokens, Keys& keys) {
   for (const auto& token : tokens)
-    if (not token.is_string)
+    if (!token.is_string)
       keys.push_back(token);
 }
 
