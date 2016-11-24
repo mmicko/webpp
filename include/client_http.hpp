@@ -159,8 +159,8 @@ namespace webpp {
 					throw std::system_error(ec);
 				}
 			});
-			io_service.reset();
-			io_service.run();
+			io_context.reset();
+			io_context.run();
             
             return request_read();
         }
