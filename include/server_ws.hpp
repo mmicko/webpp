@@ -298,8 +298,10 @@ namespace webpp {
         
         virtual void accept()=0;
         
-        std::shared_ptr<asio::system_timer> set_timeout_on_connection(const std::shared_ptr<Connection> &connection, size_t seconds) {
-            std::shared_ptr<asio::system_timer> timer(new asio::system_timer(*io_context));
+        std::shared_ptr<asio::system_timer> get_timeout_timer(const std::shared_ptr<Connection> &connection, size_t seconds) {
+			if (seconds == 0)
+				return nullptr; 
+			auto timer = std::make_shared<asio::system_timer>(*io_context);
             timer->expires_at(std::chrono::system_clock::now() + std::chrono::seconds(static_cast<long>(seconds)));
             timer->async_wait([connection](const std::error_code& ec){
                 if(!ec) {
@@ -318,14 +320,12 @@ namespace webpp {
             std::shared_ptr<asio::streambuf> read_buffer = std::make_shared<asio::streambuf>();
 
             //Set timeout on the following asio::async-read or write function
-            std::shared_ptr<asio::system_timer> timer;
-            if(timeout_request>0)
-                timer=set_timeout_on_connection(connection, timeout_request);
+			auto timer = get_timeout_timer(connection, timeout_request);
             
             asio::async_read_until(*connection->socket, *read_buffer, "\r\n\r\n",
                     [this, connection, read_buffer, timer]
                     (const std::error_code& ec, size_t /*bytes_transferred*/) {
-                if(timeout_request>0)
+                if(timer)
                     timer->cancel();
                 if(!ec) {
                     //Convert to istream to extract string-lines
