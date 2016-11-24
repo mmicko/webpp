@@ -47,9 +47,12 @@ namespace webpp {
 							if (!ec) {
 								asio::ip::tcp::no_delay option(true);
 								socket->lowest_layer().set_option(option);
-
+								
+								auto timer = get_timeout_timer();
 								socket->async_handshake(asio::ssl::stream_base::client,
-									[this](const std::error_code& ec) {
+									[this, timer](const std::error_code& ec) {
+									if (timer)
+										timer->cancel();
 									if (ec) {
 										socket = nullptr;
 										throw std::system_error(ec);

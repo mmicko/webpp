@@ -235,7 +235,9 @@ namespace webpp {
 
         virtual void accept()=0;
         
-        std::shared_ptr<asio::system_timer> set_timeout_on_socket(const std::shared_ptr<socket_type> &socket, long seconds) {
+        std::shared_ptr<asio::system_timer> get_timeout_timer(const std::shared_ptr<socket_type> &socket, long seconds) {
+            if(seconds==0)
+                return nullptr;
             auto timer = std::make_shared<asio::system_timer>(*m_io_context);
             timer->expires_at(std::chrono::system_clock::now() + std::chrono::seconds(seconds));
             timer->async_wait([socket](const std::error_code& ec){
@@ -262,13 +264,11 @@ namespace webpp {
             }
 
             //Set timeout on the following asio::async-read or write function
-            std::shared_ptr<asio::system_timer> timer;
-            if(timeout_request>0)
-                timer=set_timeout_on_socket(socket, timeout_request);
+			auto timer = get_timeout_timer(socket, timeout_request);
                         
             asio::async_read_until(*socket, request->streambuf, "\r\n\r\n",
                     [this, socket, request, timer](const std::error_code& ec, size_t bytes_transferred) {
-                if(timeout_request>0)
+                if(timer)
                     timer->cancel();
                 if(!ec) {
                     //request->streambuf.size() is not necessarily the same as bytes_transferred, from Boost-docs:
@@ -284,9 +284,7 @@ namespace webpp {
                     auto it=request->header.find("Content-Length");
                     if(it!=request->header.end()) {
                         //Set timeout on the following asio::async-read or write function
-                        std::shared_ptr<asio::system_timer> timer2;
-                        if(timeout_content>0)
-                            timer2=set_timeout_on_socket(socket, timeout_content);
+						auto timer2 = get_timeout_timer(socket, timeout_request);
                         unsigned long long content_length;
                         try {
                             content_length=stoull(it->second);
@@ -301,14 +299,14 @@ namespace webpp {
                                     asio::transfer_exactly(size_t(content_length)-num_additional_bytes),
                                     [this, socket, request, timer2]
                                     (const std::error_code& ec, size_t /*bytes_transferred*/) {
-                                if(timeout_content>0)
+                                if(timer2)
                                     timer2->cancel();
                                 if(!ec)
                                     find_resource(socket, request);
                             });
                         }
                         else {
-                            if(timeout_content>0)
+                            if(timer2)
                                 timer2->cancel();
                             find_resource(socket, request);
                         }
@@ -392,15 +390,13 @@ namespace webpp {
 							
         void write_response(const std::shared_ptr<socket_type> &socket, const std::shared_ptr<Request> &request, http_handler& resource_function) {
             //Set timeout on the following asio::async-read or write function
-            std::shared_ptr<asio::system_timer> timer;
-            if(timeout_content>0)
-                timer=set_timeout_on_socket(socket, timeout_content);
+			auto timer = get_timeout_timer(socket, timeout_request);
 
             auto response=std::shared_ptr<Response>(new Response(socket), [this, request, timer](Response *response_ptr) {
                 auto response=std::shared_ptr<Response>(response_ptr);
                 send(response, [this, response, request, timer](const std::error_code& ec) {
                     if(!ec) {
-                        if(timeout_content>0)
+                        if(timer)
                             timer->cancel();
                         float http_version;
                         try {
