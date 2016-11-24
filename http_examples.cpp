@@ -60,7 +60,7 @@ int main() {
     //GET-example for the path /match/[number], responds with the matched string in path (number)
     //For instance a request GET /match/123 will receive: 123
     server.on_get("/match/:id(\\d+)", [&server](auto response, auto request) {
-		std::string number = request->parameters["id"];
+		std::string number = request->params["id"];
 		response->status(200).send(number);
     });
     

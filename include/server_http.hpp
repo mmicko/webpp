@@ -109,7 +109,7 @@ namespace webpp {
             std::unordered_multimap<std::string, std::string, ihash, iequal_to> header;
 
 			path2regex::Keys keys;
-			std::map<std::string, std::string> parameters;
+			std::map<std::string, std::string> params;
             
             std::string remote_endpoint_address;
             unsigned short remote_endpoint_port;
@@ -370,7 +370,7 @@ namespace webpp {
                         if(std::regex_match(request->path, sm_res, std::get<0>(res_path))) {
 							request->keys = std::get<1>(res_path);							
 							for (size_t i = 0; i < request->keys.size(); i++) {
-								request->parameters.insert(std::pair<std::string,std::string>(request->keys[i].name, sm_res[i + 1]));
+								request->params.insert(std::pair<std::string,std::string>(request->keys[i].name, sm_res[i + 1]));
 							}
                             write_response(socket, request, std::get<2>(res_path));
                             return;
