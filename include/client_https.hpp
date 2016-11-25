@@ -33,7 +33,7 @@ namespace webpp {
     protected:
         asio::ssl::context m_context;
 		
-		std::string protocol() override
+		std::string protocol() const override
 		{
 			return "https";
 		}		
@@ -44,7 +44,7 @@ namespace webpp {
 					query = std::make_unique<asio::ip::tcp::resolver::query>(host, std::to_string(port));
 				}
 				else {
-					auto proxy_host_port = parse_host_port(config.proxy_server, 0);
+					auto proxy_host_port = parse_host_port(config.proxy_server, 8080);
 					query = std::make_unique<asio::ip::tcp::resolver::query>(proxy_host_port.first, std::to_string(proxy_host_port.second));
 				}
 				resolver.async_resolve(*query, [this]
@@ -59,19 +59,7 @@ namespace webpp {
 								(const std::error_code &ec, asio::ip::tcp::resolver::iterator /*it*/) {
 							if (!ec) {
 								asio::ip::tcp::no_delay option(true);
-								socket->lowest_layer().set_option(option);
-								
-								auto timer = get_timeout_timer();
-								socket->async_handshake(asio::ssl::stream_base::client,
-									[this, timer](const std::error_code& ec) {
-									if (timer)
-										timer->cancel();
-									if (ec) {
-										std::lock_guard<std::mutex> lock(socket_mutex);
-										socket = nullptr;
-										throw std::system_error(ec);
-									}
-								});
+								socket->lowest_layer().set_option(option);																
 							}
 							else {
 								std::lock_guard<std::mutex> lock(socket_mutex);
@@ -81,6 +69,47 @@ namespace webpp {
 						});
 					}
 					else {
+						std::lock_guard<std::mutex> lock(socket_mutex);
+						socket = nullptr;
+						throw std::system_error(ec);
+					}
+				});
+				io_context.reset();
+				io_context.run();
+
+				if (!config.proxy_server.empty()) {
+					asio::streambuf write_buffer;
+					std::ostream write_stream(&write_buffer);
+					auto host_port = host + ':' + std::to_string(port);
+					write_stream << "CONNECT " + host_port + " HTTP/1.1\r\n" << "Host: " << host_port << "\r\n\r\n";
+					auto timer = get_timeout_timer();
+					asio::async_write(*socket, write_buffer,
+						[this, timer](const std::error_code &ec, size_t /*bytes_transferred*/) {
+						if (timer)
+							timer->cancel();
+						if (ec) {
+							std::lock_guard<std::mutex> lock(socket_mutex);
+							socket = nullptr;
+							throw std::system_error(ec);
+						}
+					});
+					io_context.reset();
+					io_context.run();
+
+					auto response = request_read();
+					if (response->status_code.size()>0 && response->status_code.substr(0, 3) != "200") {
+						std::lock_guard<std::mutex> lock(socket_mutex);
+						socket = nullptr;
+						throw std::system_error(std::error_code(int(std::errc::permission_denied), std::generic_category()));
+					}
+				}
+
+				auto timer = get_timeout_timer();
+				this->socket->async_handshake(asio::ssl::stream_base::client,
+					[this, timer](const std::error_code& ec) {
+					if (timer)
+						timer->cancel();
+					if (ec) {
 						std::lock_guard<std::mutex> lock(socket_mutex);
 						socket = nullptr;
 						throw std::system_error(ec);
