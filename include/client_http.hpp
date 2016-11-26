@@ -11,6 +11,7 @@
 #include <map>
 #include <random>
 #include <mutex>
+#include <type_traits>
 
 namespace webpp {
     template <class socket_type>
@@ -73,8 +74,8 @@ namespace webpp {
             auto corrected_path=path;
             if(corrected_path=="")
                 corrected_path="/";
-			if (!config.proxy_server.empty())
-				corrected_path = protocol() + "://" + host + ':' + std::to_string(port) + corrected_path;
+			if (!config.proxy_server.empty() && std::is_same<socket_type, asio::ip::tcp::socket>::value)
+				corrected_path = "http://" + host + ':' + std::to_string(port) + corrected_path;
 
             asio::streambuf write_buffer;
             std::ostream write_stream(&write_buffer);
@@ -125,8 +126,8 @@ namespace webpp {
             auto corrected_path=path;
             if(corrected_path=="")
                 corrected_path="/";
-			if (!config.proxy_server.empty())
-				corrected_path = protocol() + "://" + host + ':' + std::to_string(port) + corrected_path;
+			if (!config.proxy_server.empty() && std::is_same<socket_type, asio::ip::tcp::socket>::value)
+				corrected_path = "http://" + host + ':' + std::to_string(port) + corrected_path;
             
             content.seekp(0, std::ios::end);
             auto content_length=content.tellp();
@@ -202,7 +203,6 @@ namespace webpp {
 			return parsed_host_port;
         }
         
-		virtual std::string protocol() const = 0;
         virtual void connect()=0;
         
 		std::shared_ptr<asio::system_timer> get_timeout_timer() {
@@ -375,11 +375,6 @@ namespace webpp {
 		explicit Client(const std::string& server_port_path) : ClientBase(server_port_path, 80) { }
         
     protected:
-		std::string protocol() const override
-		{
-			return "http";
-		}
-
         void connect() override {
             if(!socket || !socket->is_open()) {
 				std::unique_ptr<asio::ip::tcp::resolver::query> query;

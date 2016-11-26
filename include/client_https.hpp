@@ -33,10 +33,6 @@ namespace webpp {
     protected:
         asio::ssl::context m_context;
 		
-		std::string protocol() const override
-		{
-			return "https";
-		}		
         void connect() override {
             if(!socket || !socket->lowest_layer().is_open()) {
 				std::unique_ptr<asio::ip::tcp::resolver::query> query;
