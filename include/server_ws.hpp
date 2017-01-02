@@ -2,7 +2,7 @@
 // copyright-holders:Ole Christian Eidheim, Miodrag Milanovic
 #ifndef SERVER_WS_HPP
 #define SERVER_WS_HPP
-
+#include "path_to_regex.hpp"
 #include "crypto.hpp"
 
 #include "asio.h"
@@ -205,9 +205,10 @@ namespace webpp {
 	private:
 		class regex_orderable : public std::regex {
 			std::string str;
+			path2regex::Keys keys;
 		public:
-			regex_orderable(const char *regex_cstr) : std::regex(regex_cstr), str(regex_cstr) {}
-			regex_orderable(const std::string &regex_cstr) : std::regex(regex_cstr), str(regex_cstr) {}
+			regex_orderable(const char *regex_cstr) : std::regex(path2regex::path_to_regex(regex_cstr, keys)), str(regex_cstr) {}
+			regex_orderable(const std::string &regex_cstr) : std::regex(path2regex::path_to_regex(regex_cstr, keys)), str(regex_cstr) {}
 			bool operator<(const regex_orderable  &rhs) const {
 				return str<rhs.str;
 			}

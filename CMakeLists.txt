@@ -28,8 +28,8 @@ endif()
 set(HTTP_HEADERS  include/asio.h include/server_http.hpp  include/client_http.hpp  3rdparty/path_to_regex/path_to_regex.hpp)
 set(HTTPS_HEADERS include/asio.h include/server_https.hpp include/client_https.hpp 3rdparty/path_to_regex/path_to_regex.hpp)
 
-set(WS_HEADERS  include/asio.h include/sha1.hpp include/crypto.hpp include/base64.hpp include/server_ws.hpp  include/client_ws.hpp )
-set(WSS_HEADERS include/asio.h include/sha1.hpp include/crypto.hpp include/base64.hpp include/server_wss.hpp include/client_wss.hpp)
+set(WS_HEADERS  include/asio.h include/sha1.hpp include/crypto.hpp include/base64.hpp include/server_ws.hpp  include/client_ws.hpp  3rdparty/path_to_regex/path_to_regex.hpp)
+set(WSS_HEADERS include/asio.h include/sha1.hpp include/crypto.hpp include/base64.hpp include/server_wss.hpp include/client_wss.hpp 3rdparty/path_to_regex/path_to_regex.hpp)
 
 if(OPENSSL_FOUND)
     include_directories(SYSTEM ${OPENSSL_INCLUDE_DIR})
@@ -38,7 +38,7 @@ if(OPENSSL_FOUND)
     target_link_libraries(https_examples ${OPENSSL_LIBRARIES})
     target_link_libraries(https_examples ${CMAKE_THREAD_LIBS_INIT})
 
-    add_executable(wss_examples wss_examples.cpp ${WSS_HEADERS})
+    add_executable(wss_examples wss_examples.cpp 3rdparty/path_to_regex/path_to_regex.cpp ${WSS_HEADERS})
     target_link_libraries(wss_examples ${OPENSSL_LIBRARIES})
     target_link_libraries(wss_examples ${CMAKE_THREAD_LIBS_INIT})
 endif()
@@ -46,7 +46,7 @@ endif()
 add_executable(http_examples http_examples.cpp 3rdparty/path_to_regex/path_to_regex.cpp ${HTTP_HEADERS})
 target_link_libraries(http_examples ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(ws_examples ws_examples.cpp ${WS_HEADERS})
+add_executable(ws_examples ws_examples.cpp 3rdparty/path_to_regex/path_to_regex.cpp ${WS_HEADERS})
 target_link_libraries(ws_examples ${CMAKE_THREAD_LIBS_INIT})
 
 if( MSYS OR MINGW OR MSVC) #TODO: Is MSYS true when MSVC is true?

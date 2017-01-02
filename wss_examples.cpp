@@ -17,7 +17,7 @@ int main() {
 	//    var wss=new WebSocket("wss://localhost:8080/echo");
 	//    wss.onmessage=function(evt){console.log(evt.data);};
 	//    wss.send("test");
-	auto& echo=server.endpoint["^/echo/?$"];
+	auto& echo=server.endpoint["/echo"];
 
 	echo.on_message=[&server](auto connection, auto message) {
 		//WssServer::Message::string() is a convenience function for:
@@ -63,7 +63,7 @@ int main() {
 	//    var wss=new WebSocket("wss://localhost:8080/echo_thrice");
 	//    wss.onmessage=function(evt){console.log(evt.data);};
 	//    wss.send("test");
-	auto& echo_thrice=server.endpoint["^/echo_thrice/?$"];
+	auto& echo_thrice=server.endpoint["/echo_thrice"];
 	echo_thrice.on_message=[&server](auto connection, auto message) {
 		auto message_str=message->string();
 
@@ -89,7 +89,7 @@ int main() {
 	//    var wss=new WebSocket("wss://localhost:8080/echo_all");
 	//    wss.onmessage=function(evt){console.log(evt.data);};
 	//    wss.send("test");
-	auto& echo_all=server.endpoint["^/echo_all/?$"];
+	auto& echo_all=server.endpoint["/echo_all"];
 	echo_all.on_message=[&server](auto /*connection*/, auto message) {
 		auto message_str=message->string();
 
