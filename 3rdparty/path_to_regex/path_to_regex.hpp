@@ -27,7 +27,7 @@
 namespace path2regex {
 
 struct Token {
-	std::string name      {};	// can be a string or an int (index)
+	std::string name      {};   // can be a string or an int (index)
 	std::string prefix    {};
 	std::string delimiter {};
 	std::string pattern   {};
@@ -35,12 +35,12 @@ struct Token {
   bool        repeat    {false};
   bool        partial   {false};
   bool        asterisk  {false};
-	bool        is_string {false};	// If it is a string we only put/have a string in the name-attribute (path in parse-method)
-	               	// So if this is true, we can ignore all attributes except name
+	bool        is_string {false};  // If it is a string we only put/have a string in the name-attribute (path in parse-method)
+					// So if this is true, we can ignore all attributes except name
 
   void set_string_token(const std::string& name_) {
-    name = name_;
-    is_string = true;
+	name = name_;
+	is_string = true;
   }
 }; //< struct Token
 

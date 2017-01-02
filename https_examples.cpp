@@ -6,12 +6,12 @@ using HttpsClient = webpp::Client<webpp::HTTPS>;
 
 
 int main() {
-    //HTTPS-server at port 8080 using 1 thread
-    //Unless you do more heavy non-threaded processing in the resources,
-    //1 thread is usually faster than several threads
-    HttpsServer server("server.crt", "server.key");
-	server.m_config.port = 8080;	
-    
+	//HTTPS-server at port 8080 using 1 thread
+	//Unless you do more heavy non-threaded processing in the resources,
+	//1 thread is usually faster than several threads
+	HttpsServer server("server.crt", "server.key");
+	server.m_config.port = 8080;
+
 	//Add resources using path-regex and method-string, and an anonymous function
 	//POST-example for the path /string, responds the posted string
 	server.on_post("/string", [](auto response, auto request) {
@@ -70,7 +70,7 @@ int main() {
 		work_thread.detach();
 	});
 
-	//Default GET-example. If no other matches, this anonymous function will be called. 
+	//Default GET-example. If no other matches, this anonymous function will be called.
 	//Will respond with content in the web/-directory, and its subdirectories.
 	//Default file: index.html
 	//Can for instance be used to retrieve an HTML 5 client that uses REST-resources on this server
@@ -88,16 +88,16 @@ int main() {
 		//                path/="index.html";
 		//            if(!(boost::filesystem::exists(path) && boost::filesystem::is_regular_file(path)))
 		//                throw invalid_argument("file does not exist");
-		//            
+		//
 		//            auto ifs=make_shared<ifstream>();
 		//            ifs->open(path.string(), ifstream::in | ios::binary);
-		//            
+		//
 		//            if(*ifs) {
 		//                ifs->seekg(0, ios::end);
 		//                auto length=ifs->tellg();
-		//                
+		//
 		//                ifs->seekg(0, ios::beg);
-		//                
+		//
 		//                *response << "HTTP/1.1 200 OK\r\nContent-Length: " << length << "\r\n\r\n";
 		//                default_resource_send(server, response, ifs);
 		//            }
@@ -115,25 +115,25 @@ int main() {
 		server.start();
 	});
 
-    
-    //Wait for server to start so that the client can connect
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    
-    //Client examples
-    //Second Client() parameter set to false: no certificate verification
-    HttpsClient client("localhost:8080", false);
-    auto r1=client.request("GET", "/match/123");
-    std::cout << r1->content.rdbuf() << std::endl;
 
-    std::string json_string="{\"firstName\": \"John\",\"lastName\": \"Smith\",\"age\": 25}";
-    auto r2=client.request("POST", "/string", json_string);
-    std::cout << r2->content.rdbuf() << std::endl;
-    
-    auto r3=client.request("POST", "/json", json_string);
-    std::cout << r3->content.rdbuf() << std::endl;
-    
-    server_thread.join();
-    
-    return 0;
+	//Wait for server to start so that the client can connect
+	std::this_thread::sleep_for(std::chrono::seconds(1));
+
+	//Client examples
+	//Second Client() parameter set to false: no certificate verification
+	HttpsClient client("localhost:8080", false);
+	auto r1=client.request("GET", "/match/123");
+	std::cout << r1->content.rdbuf() << std::endl;
+
+	std::string json_string="{\"firstName\": \"John\",\"lastName\": \"Smith\",\"age\": 25}";
+	auto r2=client.request("POST", "/string", json_string);
+	std::cout << r2->content.rdbuf() << std::endl;
+
+	auto r3=client.request("POST", "/json", json_string);
+	std::cout << r3->content.rdbuf() << std::endl;
+
+	server_thread.join();
+
+	return 0;
 }
 
