@@ -2,6 +2,100 @@
 // copyright-holders:Ole Christian Eidheim, Miodrag Milanovic
 #include "server_http.hpp"
 #include "client_http.hpp"
+#include <fstream>
+struct mapping
+{
+	const char* extension;
+	const char* mime_type;
+} mappings[] =
+{
+	{ "aac",     "audio/aac" },
+	{ "aat",     "application/font-sfnt" },
+	{ "aif",     "audio/x-aif" },
+	{ "arj",     "application/x-arj-compressed" },
+	{ "asf",     "video/x-ms-asf" },
+	{ "avi",     "video/x-msvideo" },
+	{ "bmp",     "image/bmp" },
+	{ "cff",     "application/font-sfnt" },
+	{ "css",     "text/css" },
+	{ "csv",     "text/csv" },
+	{ "doc",     "application/msword" },
+	{ "eps",     "application/postscript" },
+	{ "exe",     "application/octet-stream" },
+	{ "gif",     "image/gif" },
+	{ "gz",      "application/x-gunzip" },
+	{ "htm",     "text/html" },
+	{ "html",    "text/html" },
+	{ "ico",     "image/x-icon" },
+	{ "ief",     "image/ief" },
+	{ "jpeg",    "image/jpeg" },
+	{ "jpg",     "image/jpeg" },
+	{ "jpm",     "image/jpm" },
+	{ "jpx",     "image/jpx" },
+	{ "js",      "application/javascript" },
+	{ "json",    "application/json" },
+	{ "m3u",     "audio/x-mpegurl" },
+	{ "m4v",     "video/x-m4v" },
+	{ "mid",     "audio/x-midi" },
+	{ "mov",     "video/quicktime" },
+	{ "mp3",     "audio/mpeg" },
+	{ "mp4",     "video/mp4" },
+	{ "mpeg",    "video/mpeg" },
+	{ "mpg",     "video/mpeg" },
+	{ "oga",     "audio/ogg" },
+	{ "ogg",     "audio/ogg" },
+	{ "ogv",     "video/ogg" },
+	{ "otf",     "application/font-sfnt" },
+	{ "pct",     "image/x-pct" },
+	{ "pdf",     "application/pdf" },
+	{ "pfr",     "application/font-tdpfr" },
+	{ "pict",    "image/pict" },
+	{ "png",     "image/png" },
+	{ "ppt",     "application/x-mspowerpoint" },
+	{ "ps",      "application/postscript" },
+	{ "qt",      "video/quicktime" },
+	{ "ra",      "audio/x-pn-realaudio" },
+	{ "ram",     "audio/x-pn-realaudio" },
+	{ "rar",     "application/x-arj-compressed" },
+	{ "rgb",     "image/x-rgb" },
+	{ "rtf",     "application/rtf" },
+	{ "sgm",     "text/sgml" },
+	{ "shtm",    "text/html" },
+	{ "shtml",   "text/html" },
+	{ "sil",     "application/font-sfnt" },
+	{ "svg",     "image/svg+xml" },
+	{ "swf",     "application/x-shockwave-flash" },
+	{ "tar",     "application/x-tar" },
+	{ "tgz",     "application/x-tar-gz" },
+	{ "tif",     "image/tiff" },
+	{ "tiff",    "image/tiff" },
+	{ "torrent", "application/x-bittorrent" },
+	{ "ttf",     "application/font-sfnt" },
+	{ "txt",     "text/plain" },
+	{ "wav",     "audio/x-wav" },
+	{ "webm",    "video/webm" },
+	{ "woff",    "application/font-woff" },
+	{ "wrl",     "model/vrml" },
+	{ "xhtml",   "application/xhtml+xml" },
+	{ "xls",     "application/x-msexcel" },
+	{ "xml",     "text/xml" },
+	{ "xsl",     "application/xml" },
+	{ "xslt",    "application/xml" },
+	{ "zip",     "application/x-zip-compressed" }
+};
+
+std::string extension_to_type(const std::string& extension)
+{
+	for (mapping m : mappings)
+	{
+		if (m.extension == extension)
+		{
+			return m.mime_type;
+		}
+	}
+
+	return "text/plain";
+}
 
 using HttpServer = webpp::Server<webpp::HTTP>;
 using HttpClient = webpp::Client<webpp::HTTP>;
@@ -79,39 +173,45 @@ int main() {
 	//Default file: index.html
 	//Can for instance be used to retrieve an HTML 5 client that uses REST-resources on this server
 	server.on_get([&server](auto response, auto request) {
-		std::string message = "Dummy";
-		response->status(200).send(message);
-//        try {
-//            auto web_root_path=boost::filesystem::canonical("web");
-//            auto path=boost::filesystem::canonical(web_root_path/request->path);
-//            //Check if path is within web_root_path
-//            if(distance(web_root_path.begin(), web_root_path.end())>distance(path.begin(), path.end()) ||
-//               !equal(web_root_path.begin(), web_root_path.end(), path.begin()))
-//                throw invalid_argument("path must be within root path");
-//            if(boost::filesystem::is_directory(path))
-//                path/="index.html";
-//            if(!(boost::filesystem::exists(path) && boost::filesystem::is_regular_file(path)))
-//                throw invalid_argument("file does not exist");
-//
-//            auto ifs=make_shared<ifstream>();
-//            ifs->open(path.string(), ifstream::in | ios::binary);
-//
-//            if(*ifs) {
-//                ifs->seekg(0, ios::end);
-//                auto length=ifs->tellg();
-//
-//                ifs->seekg(0, ios::beg);
-//
-//                *response << "HTTP/1.1 200 OK\r\nContent-Length: " << length << "\r\n\r\n";
-//                default_resource_send(server, response, ifs);
-//            }
-//            else
-//                throw invalid_argument("could not read file");
-//        }
-//        catch(const exception &e) {
-//            string content="Could not open path "+request->path+": "+e.what();
-//            *response << "HTTP/1.1 400 Bad Request\r\nContent-Length: " << content.length() << "\r\n\r\n" << content;
-//        }
+
+		std::string doc_root = "web/";
+		std::string path = request->path;
+		// If path ends in slash (i.e. is a directory) then add "index.html".
+		if (path[path.size() - 1] == '/')
+		{
+			path += "index.html";
+		}
+
+		std::size_t last_qmark_pos = path.find_last_of("?");
+		if (last_qmark_pos != std::string::npos)
+			path = path.substr(0, last_qmark_pos - 1);
+
+		// Determine the file extension.
+		std::size_t last_slash_pos = path.find_last_of("/");
+		std::size_t last_dot_pos = path.find_last_of(".");
+		std::string extension;
+		if (last_dot_pos != std::string::npos && last_dot_pos > last_slash_pos)
+		{
+			extension = path.substr(last_dot_pos + 1);
+		}
+
+		// Open the file to send back.
+		std::string full_path = doc_root + path;
+		std::ifstream is(full_path.c_str(), std::ios::in | std::ios::binary);
+		if (!is)
+		{
+			response->status(400).send("Error");
+		}
+
+		// Fill out the reply to be sent to the client.
+		std::string content;
+		char buf[512];
+		while (is.read(buf, sizeof(buf)).gcount() > 0)
+			content.append(buf, size_t(is.gcount()));
+
+		response->type(extension_to_type(extension));
+		response->status(200).send(content);
+
 	});
 
 	std::thread server_thread([&server, &io_context](){
