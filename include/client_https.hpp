@@ -14,20 +14,23 @@ namespace webpp {
                 const std::string& cert_file=std::string(), const std::string& private_key_file=std::string(), 
                 const std::string& verify_file=std::string()) : 
                 ClientBase(server_port_path, 443), m_context(asio::ssl::context::tlsv12) {
-            if(verify_certificate) {
-                m_context.set_verify_mode(asio::ssl::verify_peer);
-                m_context.set_default_verify_paths();
-            }
-            else
-                m_context.set_verify_mode(asio::ssl::verify_none);
-            
             if(cert_file.size()>0 && private_key_file.size()>0) {
                 m_context.use_certificate_chain_file(cert_file);
                 m_context.use_private_key_file(private_key_file, asio::ssl::context::pem);
             }
             
+            if(verify_certificate)
+				m_context.set_verify_callback(asio::ssl::rfc2818_verification(host));
+             
             if(verify_file.size()>0)
-                m_context.load_verify_file(verify_file);
+				m_context.load_verify_file(verify_file);
+            else
+				m_context.set_default_verify_paths();
+             
+            if(verify_file.size()>0 || verify_certificate)
+				m_context.set_verify_mode(asio::ssl::verify_peer);
+            else
+				m_context.set_verify_mode(asio::ssl::verify_none);
         }
 
     protected:
@@ -51,8 +54,11 @@ namespace webpp {
 							socket = std::make_unique<HTTPS>(io_context, m_context);
 						}
 						
-						asio::async_connect(socket->lowest_layer(), it, [this]
+						auto timer = get_timeout_timer();
+						asio::async_connect(socket->lowest_layer(), it, [this, timer]
 								(const std::error_code &ec, asio::ip::tcp::resolver::iterator /*it*/) {
+							if (timer)
+								timer->cancel();
 							if (!ec) {
 								asio::ip::tcp::no_delay option(true);
 								socket->lowest_layer().set_option(option);																
@@ -79,7 +85,7 @@ namespace webpp {
 					auto host_port = host + ':' + std::to_string(port);
 					write_stream << "CONNECT " + host_port + " HTTP/1.1\r\n" << "Host: " << host_port << "\r\n\r\n";
 					auto timer = get_timeout_timer();
-					asio::async_write(*socket, write_buffer,
+					asio::async_write(socket->next_layer(), write_buffer,
 						[this, timer](const std::error_code &ec, size_t /*bytes_transferred*/) {
 						if (timer)
 							timer->cancel();
@@ -92,8 +98,23 @@ namespace webpp {
 					io_context.reset();
 					io_context.run();
 
-					auto response = request_read();
-					if (response->status_code.size()>0 && response->status_code.substr(0, 3) != "200") {
+                    std::shared_ptr<Response> response(new Response());
+                    timer=get_timeout_timer();
+                    asio::async_read_until(socket->next_layer(), response->content_buffer, "\r\n\r\n",
+                                                [this, timer](const std::error_code& ec, size_t /*bytes_transferred*/) {
+                        if(timer)
+                            timer->cancel();
+                        if(ec) {
+                            std::lock_guard<std::mutex> lock(socket_mutex);
+                            socket=nullptr;
+                            throw std::system_error(ec);
+                        }
+                    });
+					io_context.reset();
+					io_context.run();
+                    parse_response_header(response);
+
+					if (response->status_code.size()>0 && response->status_code.compare(0, 3, "200") != 0) {
 						std::lock_guard<std::mutex> lock(socket_mutex);
 						socket = nullptr;
 						throw std::system_error(std::error_code(int(std::errc::permission_denied), std::generic_category()));

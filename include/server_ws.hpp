@@ -18,6 +18,30 @@
 #include <chrono>
 #include <regex>
 
+#ifndef CASE_INSENSITIVE_EQUALS_AND_HASH
+#define CASE_INSENSITIVE_EQUALS_AND_HASH
+class case_insensitive_equals {
+public:
+	bool operator()(const std::string &key1, const std::string &key2) const {
+		return key1.size() == key2.size()
+			&& equal(key1.cbegin(), key1.cend(), key2.cbegin(),
+				[](std::string::value_type key1v, std::string::value_type key2v)
+		{ return tolower(key1v) == tolower(key2v); });
+	}
+};
+class case_insensitive_hash {
+public:
+	size_t operator()(const std::string &key) const {
+		size_t seed = 0;
+		for (auto &c : key) {
+			std::hash<char> hasher;
+			seed ^= hasher(std::tolower(c)) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+		}
+		return seed;
+	}
+};
+#endif
+
 namespace webpp {
     template <class socket_type>
     class SocketServer;
@@ -43,9 +67,11 @@ namespace webpp {
             friend class SocketServer<socket_type>;
             
         public:
+	        explicit Connection(const std::shared_ptr<socket_type> &socket) : remote_endpoint_port(0), socket(socket), strand(socket->get_io_service()), closed(false) { }
+
             std::string method, path, http_version;
 
-            std::unordered_map<std::string, std::string> header;
+            std::unordered_multimap<std::string, std::string, case_insensitive_hash, case_insensitive_equals> header;
 
             std::smatch path_match;
             
@@ -53,7 +79,7 @@ namespace webpp {
             unsigned short remote_endpoint_port;
             
         private:
-	        explicit Connection(socket_type *socket): remote_endpoint_port(0), socket(socket), strand(socket->get_io_context()), closed(false) { }
+	        explicit Connection(socket_type *socket): remote_endpoint_port(0), socket(socket), strand(socket->get_io_service()), closed(false) { }
 
             class SendData {
             public:
@@ -65,8 +91,7 @@ namespace webpp {
                 std::function<void(const std::error_code)> callback;
             };
             
-            //asio::ssl::stream constructor needs move, until then we store socket as unique_ptr
-            std::unique_ptr<socket_type> socket;
+            std::shared_ptr<socket_type> socket;
             
             asio::io_context::strand strand;
             
@@ -111,9 +136,7 @@ namespace webpp {
                     remote_endpoint_address=socket->lowest_layer().remote_endpoint().address().to_string();
                     remote_endpoint_port=socket->lowest_layer().remote_endpoint().port();
                 }
-                catch(const std::exception& e) {
-                    std::cerr << e.what() << std::endl;
-                }
+				catch (...) {}
             }
         };
         
@@ -143,10 +166,10 @@ namespace webpp {
             std::mutex connections_mutex;
 
         public:            
-            std::function<void(std::shared_ptr<Connection>)> onopen;
-            std::function<void(std::shared_ptr<Connection>, std::shared_ptr<Message>)> onmessage;
-            std::function<void(std::shared_ptr<Connection>, const std::error_code&)> onerror;
-            std::function<void(std::shared_ptr<Connection>, int, const std::string&)> onclose;
+            std::function<void(std::shared_ptr<Connection>)> on_open;
+            std::function<void(std::shared_ptr<Connection>, std::shared_ptr<Message>)> on_message;
+            std::function<void(std::shared_ptr<Connection>, int, const std::string&)> on_close;
+            std::function<void(std::shared_ptr<Connection>, const std::error_code&)> on_error;
             
             std::unordered_set<std::shared_ptr<Connection> > get_connections() {
                 std::lock_guard<std::mutex> lock(connections_mutex);
@@ -158,31 +181,41 @@ namespace webpp {
         class Config {
             friend class SocketServerBase<socket_type>;
 
-            Config(unsigned short port): port(port), reuse_address(true) {}
+			Config(unsigned short port) : port(port) {}
         public:
+			/// Port number to use. Defaults to 80 for HTTP and 443 for HTTPS.
             unsigned short port;
-            ///IPv4 address in dotted decimal form or IPv6 address in hexadecimal notation.
-            ///If empty, the address will be any address.
+            /// Number of threads that the server will use when start() is called. Defaults to 1 thread.
+            size_t thread_pool_size=1;
+            /// Timeout on request handling. Defaults to 5 seconds.
+            size_t timeout_request=5;
+            /// Idle timeout. Defaults to no timeout.
+            size_t timeout_idle=0;
+            /// IPv4 address in dotted decimal form or IPv6 address in hexadecimal notation.
+            /// If empty, the address will be any address.
             std::string address;
-            ///Set to false to avoid binding the socket to an address that is already in use.
-            bool reuse_address;
+            /// Set to false to avoid binding the socket to an address that is already in use. Defaults to true.
+            bool reuse_address=true;
         };
         ///Set before calling start().
         Config config;
         
-        std::map<std::string, Endpoint> endpoint;
-        
     private:
-        std::vector<std::pair<std::regex, Endpoint*> > opt_endpoint;
-        
-    public:
-        void start() {
-            opt_endpoint.clear();
-            for(auto& endp: endpoint) {
-                opt_endpoint.emplace_back(std::regex(endp.first), &endp.second);
+        class regex_orderable : public std::regex {
+            std::string str;
+        public:
+			regex_orderable(const char *regex_cstr) : std::regex(regex_cstr), str(regex_cstr) {}
+			regex_orderable(const std::string &regex_cstr) : std::regex(regex_cstr), str(regex_cstr) {}
+            bool operator<(const regex_orderable  &rhs) const {
+                return str<rhs.str;
             }
-            
-            if(!io_context)
+        };
+    public:
+		/// Warning: do not add or remove endpoints after start() is called
+        std::map<regex_orderable, Endpoint> endpoint;
+
+    	virtual void start() {
+			if(!io_context)
                 io_context=std::make_shared<asio::io_context>();
             
             if(io_context->stopped())
@@ -279,7 +312,30 @@ namespace webpp {
             }
             return all_connections;
         }
-        
+
+		/**
+		* Upgrades a request, from for instance Simple-Web-Server, to a WebSocket connection.
+		* The parameters are moved to the Connection object.
+		* See also Server::on_upgrade in the Simple-Web-Server project.
+		* The socket's io_service is used, thus running start() is not needed.
+		*
+		* Example use:
+		* server.on_upgrade=[&socket_server] (auto socket, auto request) {
+		*   auto connection=std::make_shared<SimpleWeb::SocketServer<SimpleWeb::WS>::Connection>(socket);
+    	*   connection->method=std::move(request->method);
+		*   connection->path=std::move(request->path);
+		*   connection->http_version=std::move(request->http_version);
+		*   connection->header=std::move(request->header);
+		*   connection->remote_endpoint_address=std::move(request->remote_endpoint_address);
+		*   connection->remote_endpoint_port=request->remote_endpoint_port;
+		*   socket_server.upgrade(connection);
+		* }
+		*/
+		void upgrade(const std::shared_ptr<Connection> &connection) {
+            auto read_buffer=std::make_shared<asio::streambuf>();
+            write_handshake(connection, read_buffer);
+        }
+      
         /// If you have your own asio::io_context, store its pointer here before running start().
         /// You might also want to set config.num_threads to 0.
         std::shared_ptr<asio::io_context> io_context;
@@ -290,18 +346,15 @@ namespace webpp {
         
         std::vector<std::thread> threads;
         
-        size_t timeout_request;
-        size_t timeout_idle;
-        
-        SocketServerBase(unsigned short port, size_t timeout_request, size_t timeout_idle) : 
-                config(port), timeout_request(timeout_request), timeout_idle(timeout_idle) {}
-        
+        SocketServerBase(unsigned short port) : 
+                config(port) {}
+
         virtual void accept()=0;
         
         std::shared_ptr<asio::system_timer> get_timeout_timer(const std::shared_ptr<Connection> &connection, size_t seconds) {
 			if (seconds == 0)
 				return nullptr; 
-			auto timer = std::make_shared<asio::system_timer>(*io_context);
+			auto timer = std::make_shared<asio::system_timer>(connection->socket->get_io_service());
             timer->expires_at(std::chrono::system_clock::now() + std::chrono::seconds(static_cast<long>(seconds)));
             timer->async_wait([connection](const std::error_code& ec){
                 if(!ec) {
@@ -317,10 +370,10 @@ namespace webpp {
             
             //Create new read_buffer for async_read_until()
             //Shared_ptr is used to pass temporary objects to the asynchronous functions
-            std::shared_ptr<asio::streambuf> read_buffer = std::make_shared<asio::streambuf>();
+            auto read_buffer = std::make_shared<asio::streambuf>();
 
             //Set timeout on the following asio::async-read or write function
-			auto timer = get_timeout_timer(connection, timeout_request);
+			auto timer = get_timeout_timer(connection, config.timeout_request);
             
             asio::async_read_until(*connection->socket, *read_buffer, "\r\n\r\n",
                     [this, connection, read_buffer, timer]
@@ -360,7 +413,7 @@ namespace webpp {
                             if(line[value_start]==' ')
                                 value_start++;
                             if(value_start<line.size())
-                                connection->header.insert(std::make_pair(line.substr(0, param_end), line.substr(value_start, line.size()-value_start-1)));
+                                connection->header.emplace(line.substr(0, param_end), line.substr(value_start, line.size()-value_start-1));
                         }
             
                         getline(stream, line);
@@ -371,24 +424,24 @@ namespace webpp {
         
         void write_handshake(const std::shared_ptr<Connection> &connection, const std::shared_ptr<asio::streambuf> &read_buffer) {
             //Find path- and method-match, and generate response
-            for(auto& endp: opt_endpoint) {
+			for (auto &regex_endpoint : endpoint) {
                 std::smatch path_match;
-                if(std::regex_match(connection->path, path_match, endp.first)) {
-                    std::shared_ptr<asio::streambuf> write_buffer(new asio::streambuf);
+                if(std::regex_match(connection->path, path_match, regex_endpoint.first)) {
+					auto write_buffer = std::make_shared<asio::streambuf>();
                     std::ostream handshake(write_buffer.get());
 
                     if(generate_handshake(connection, handshake)) {
                         connection->path_match=std::move(path_match);
                         //Capture write_buffer in lambda so it is not destroyed before async_write is finished
                         asio::async_write(*connection->socket, *write_buffer, 
-                                [this, connection, write_buffer, read_buffer, &endp]
+                                [this, connection, write_buffer, read_buffer, &regex_endpoint]
                                 (const std::error_code& ec, size_t /*bytes_transferred*/) {
                             if(!ec) {
-                                connection_open(connection, *endp.second);
-                                read_message(connection, read_buffer, *endp.second);
+                                connection_open(connection, regex_endpoint.second);
+                                read_message(connection, read_buffer, regex_endpoint.second);
                             }
                             else
-                                connection_error(connection, *endp.second, ec);
+                                connection_error(connection, regex_endpoint.second, ec);
                         });
                     }
                     return;
@@ -397,10 +450,11 @@ namespace webpp {
         }
         
         bool generate_handshake(const std::shared_ptr<Connection> &connection, std::ostream& handshake) const {
-            if(connection->header.count("Sec-WebSocket-Key")==0)
+			auto header_it = connection->header.find("Sec-WebSocket-Key");
+			if (header_it == connection->header.end())
                 return false;
             
-            auto sha1=sha1_encode(connection->header["Sec-WebSocket-Key"]+ws_magic_string);
+            auto sha1=sha1_encode(header_it->second + ws_magic_string);
 
             handshake << "HTTP/1.1 101 Web Socket Protocol Handshake\r\n";
             handshake << "Upgrade: websocket\r\n";
@@ -536,9 +590,9 @@ namespace webpp {
                             auto empty_send_stream=std::make_shared<SendStream>();
                             send(connection, empty_send_stream, nullptr, fin_rsv_opcode+1);
                         }
-                        else if(endpoint.onmessage) {
+                        else if(endpoint.on_message) {
                             timer_idle_reset(connection);
-                            endpoint.onmessage(connection, message);
+                            endpoint.on_message(connection, message);
                         }
     
                         //Next message
@@ -558,8 +612,8 @@ namespace webpp {
                 endpoint.connections.insert(connection);
             }
             
-            if(endpoint.onopen)
-                endpoint.onopen(connection);
+            if(endpoint.on_open)
+                endpoint.on_open(connection);
         }
         
         void connection_close(const std::shared_ptr<Connection> &connection, Endpoint& endpoint, int status, const std::string& reason) const {
@@ -570,8 +624,8 @@ namespace webpp {
                 endpoint.connections.erase(connection);
             }
             
-            if(endpoint.onclose)
-                endpoint.onclose(connection, status, reason);
+            if(endpoint.on_close)
+                endpoint.on_close(connection, status, reason);
         }
         
         void connection_error(const std::shared_ptr<Connection> &connection, Endpoint& endpoint, const std::error_code& ec) const {
@@ -582,25 +636,25 @@ namespace webpp {
                 endpoint.connections.erase(connection);
             }
             
-            if(endpoint.onerror) {
+            if(endpoint.on_error) {
                 std::error_code ec_tmp=ec;
-                endpoint.onerror(connection, ec_tmp);
+                endpoint.on_error(connection, ec_tmp);
             }
         }
         
         void timer_idle_init(const std::shared_ptr<Connection> &connection) {
-            if(timeout_idle>0) {
-                connection->timer_idle= std::make_unique<asio::system_timer>(*io_context);
-                connection->timer_idle->expires_from_now(std::chrono::seconds(static_cast<unsigned long>(timeout_idle)));
+            if(config.timeout_idle>0) {
+                connection->timer_idle= std::make_unique<asio::system_timer>(connection->socket->get_io_service());
+                connection->timer_idle->expires_from_now(std::chrono::seconds(static_cast<unsigned long>(config.timeout_idle)));
                 timer_idle_expired_function(connection);
             }
         }
         void timer_idle_reset(const std::shared_ptr<Connection> &connection) const {
-            if(timeout_idle>0 && connection->timer_idle->expires_from_now(std::chrono::seconds(static_cast<unsigned long>(timeout_idle)))>0)
+            if(config.timeout_idle>0 && connection->timer_idle->expires_from_now(std::chrono::seconds(static_cast<unsigned long>(config.timeout_idle)))>0)
                 timer_idle_expired_function(connection);
         }
         void timer_idle_cancel(const std::shared_ptr<Connection> &connection) const {
-            if(timeout_idle>0)
+            if(config.timeout_idle>0)
                 connection->timer_idle->cancel();
         }
         
@@ -625,10 +679,8 @@ namespace webpp {
     
     template<>
     class SocketServer<WS> : public SocketServerBase<WS> {
-    public:
-	    explicit SocketServer(unsigned short port, size_t timeout_request=5, size_t timeout_idle=0) : 
-                SocketServerBase(port, timeout_request, timeout_idle) {};
-        
+    public:        
+        SocketServer() : SocketServerBase<WS>(80) {}        
     protected:
         void accept() override {
             //Create new socket for this connection (stored in Connection::socket)

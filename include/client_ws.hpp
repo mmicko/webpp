@@ -10,6 +10,30 @@
 #include <list>
 #include "crypto.hpp"
 
+#ifndef CASE_INSENSITIVE_EQUALS_AND_HASH
+#define CASE_INSENSITIVE_EQUALS_AND_HASH
+class case_insensitive_equals {
+public:
+	bool operator()(const std::string &key1, const std::string &key2) const {
+		return key1.size() == key2.size()
+			&& equal(key1.cbegin(), key1.cend(), key2.cbegin(),
+				[](std::string::value_type key1v, std::string::value_type key2v)
+		{ return tolower(key1v) == tolower(key2v); });
+	}
+};
+class case_insensitive_hash {
+public:
+	size_t operator()(const std::string &key) const {
+		size_t seed = 0;
+		for (auto &c : key) {
+			std::hash<char> hasher;
+			seed ^= hasher(std::tolower(c)) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+		}
+		return seed;
+	}
+};
+#endif
+
 namespace webpp {
     template <class socket_type>
     class SocketClient;
@@ -35,7 +59,7 @@ namespace webpp {
             friend class SocketClient<socket_type>;
 
         public:
-            std::unordered_map<std::string, std::string> header;
+            std::unordered_multimap<std::string, std::string, case_insensitive_hash, case_insensitive_equals> header;
             std::string remote_endpoint_address;
             unsigned short remote_endpoint_port;
             
@@ -109,10 +133,10 @@ namespace webpp {
             asio::streambuf streambuf;
         };
         
-        std::function<void(void)> onopen;
-        std::function<void(std::shared_ptr<Message>)> onmessage;
-        std::function<void(const std::error_code&)> onerror;
-        std::function<void(int, const std::string&)> onclose;
+        std::function<void()> on_open;
+        std::function<void(std::shared_ptr<Message>)> on_message;
+        std::function<void(int, const std::string&)> on_close;
+        std::function<void(const std::error_code&)> on_error;
         
         void start() {
             if(!io_context) {
@@ -247,7 +271,7 @@ namespace webpp {
         void handshake() {
             connection->read_remote_endpoint_data();
             
-            std::shared_ptr<asio::streambuf> write_buffer = std::make_shared<asio::streambuf>();
+			auto write_buffer = std::make_shared<asio::streambuf>();
             
             std::ostream request(write_buffer.get());
             
@@ -264,39 +288,38 @@ namespace webpp {
             for(int c=0;c<16;c++)
                 nonce[c]=static_cast<unsigned char>(dist(rd));
 
-            std::string nonce_base64 = base64_encode(nonce);
-            request << "Sec-WebSocket-Key: " << nonce_base64 << "\r\n";
+			auto nonce_base64 = std::make_shared<std::string>(base64_encode(nonce));
+            request << "Sec-WebSocket-Key: " << *nonce_base64 << "\r\n";
             request << "Sec-WebSocket-Version: 13\r\n";
             request << "\r\n";
             
-            //test this to base64::decode(Sec-WebSocket-Accept)
-            std::shared_ptr<std::string> accept_sha1 = std::make_shared<std::string>(sha1_encode(nonce_base64 + ws_magic_string));
-            
             asio::async_write(*connection->socket, *write_buffer, 
-                    [this, write_buffer, accept_sha1]
+                    [this, write_buffer, nonce_base64]
                     (const std::error_code& ec, size_t /*bytes_transferred*/) {
                 if(!ec) {
                     std::shared_ptr<Message> message(new Message());
 
                     asio::async_read_until(*connection->socket, message->streambuf, "\r\n\r\n",
-                            [this, message, accept_sha1]
+                            [this, message, nonce_base64]
                             (const std::error_code& ec, size_t /*bytes_transferred*/) {
                         if(!ec) {                            
                             parse_handshake(*message);
-                            if(base64_decode(connection->header["Sec-WebSocket-Accept"])==*accept_sha1) {
-                                if(onopen)
-                                    onopen();
+							auto header_it = connection->header.find("Sec-WebSocket-Accept");
+							if (header_it != connection->header.end() &&
+								base64_decode(header_it->second) == sha1_encode(*nonce_base64 + ws_magic_string)) {
+                                if(on_open)
+                                    on_open();
                                 read_message(message);
                             }
-                            else if(onerror)
-                                onerror(std::error_code(int(std::errc::protocol_error), std::generic_category()));
+                            else if(on_error)
+                                on_error(std::error_code(int(std::errc::protocol_error), std::generic_category()));
                         }
-                        else if(onerror)
-                            onerror(ec);
+                        else if(on_error)
+                            on_error(ec);
                     });
                 }
-                else if(onerror)
-                    onerror(ec);
+                else if(on_error)
+                    on_error(ec);
             });
         }
         
@@ -313,7 +336,7 @@ namespace webpp {
                     if(line[value_start]==' ')
                         value_start++;
                     if(value_start<line.size())
-                        connection->header.insert(std::make_pair(line.substr(0, param_end), line.substr(value_start, line.size()-value_start-1)));
+                        connection->header.emplace(line.substr(0, param_end), line.substr(value_start, line.size()-value_start-1));
                 }
             
                 getline(stream, line);
@@ -339,8 +362,8 @@ namespace webpp {
                         const std::string reason("message from server masked");
                         auto kept_connection=connection;
                         send_close(1002, reason, [this, kept_connection](const std::error_code& /*ec*/) {});
-                        if(onclose)
-                            onclose(1002, reason);
+                        if(on_close)
+                            on_close(1002, reason);
                         return;
                     }
                     
@@ -364,8 +387,8 @@ namespace webpp {
                                 message->length=length;
                                 read_message_content(message);
                             }
-                            else if(onerror)
-                                onerror(ec);
+                            else if(on_error)
+                                on_error(ec);
                         });
                     }
                     else if(length==127) {
@@ -386,8 +409,8 @@ namespace webpp {
                                 message->length=length;
                                 read_message_content(message);
                             }
-                            else if(onerror)
-                                onerror(ec);
+                            else if(on_error)
+                                on_error(ec);
                         });
                     }
                     else {
@@ -395,8 +418,8 @@ namespace webpp {
                         read_message_content(message);
                     }
                 }
-                else if(onerror)
-                    onerror(ec);
+                else if(on_error)
+                    on_error(ec);
             });
         }
         
@@ -417,8 +440,8 @@ namespace webpp {
                         auto reason=message->string();
                         auto kept_connection=connection;
                         send_close(status, reason, [this, kept_connection](const std::error_code& /*ec*/) {});
-                        if(onclose)
-                            onclose(status, reason);
+                        if(on_close)
+                            on_close(status, reason);
                         return;
                     }
                     //If ping
@@ -427,16 +450,16 @@ namespace webpp {
                         auto empty_send_stream=std::make_shared<SendStream>();
                         send(empty_send_stream, nullptr, message->fin_rsv_opcode+1);
                     }
-                    else if(onmessage) {
-                        onmessage(message);
+                    else if(on_message) {
+                        on_message(message);
                     }
 
                     //Next message
                     std::shared_ptr<Message> next_message(new Message());
                     read_message(next_message);
                 }
-                else if(onerror)
-                    onerror(ec);
+                else if(on_error)
+                    on_error(ec);
             });
         }
     };
@@ -474,12 +497,12 @@ namespace webpp {
                             
                             handshake();
                         }
-                        else if(onerror)
-                            onerror(ec);
+                        else if(on_error)
+                            on_error(ec);
                     });
                 }
-                else if(onerror)
-                    onerror(ec);
+                else if(on_error)
+                    on_error(ec);
             });
         }
     };

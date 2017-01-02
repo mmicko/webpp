@@ -15,21 +15,23 @@ namespace webpp {
                 const std::string& verify_file=std::string()) : 
                 SocketClientBase(server_port_path, 443),
                 context(asio::ssl::context::tlsv12) {
-            if(verify_certificate) {
-                context.set_verify_mode(asio::ssl::verify_peer);
-                context.set_default_verify_paths();
-            }
-            else
-                context.set_verify_mode(asio::ssl::verify_none);
-            
-            if(cert_file.size()>0 && private_key_file.size()>0) {
+			if(cert_file.size()>0 && private_key_file.size()>0) {
                 context.use_certificate_chain_file(cert_file);
                 context.use_private_key_file(private_key_file, asio::ssl::context::pem);
             }
             
-            if(verify_file.size()>0)
-                context.load_verify_file(verify_file);
+			if (verify_certificate)
+				context.set_verify_callback(asio::ssl::rfc2818_verification(host));
 
+			if (verify_file.size() > 0)
+				context.load_verify_file(verify_file);
+			else
+				context.set_default_verify_paths();
+
+			if (verify_file.size()>0 || verify_certificate)
+				context.set_verify_mode(asio::ssl::verify_peer);
+			else
+				context.set_verify_mode(asio::ssl::verify_none);			
         };
 
     protected:
@@ -53,16 +55,16 @@ namespace webpp {
                                     [this](const std::error_code& ec) {
                                 if(!ec)
                                     handshake();
-                                else if(onerror)
-                                    onerror(ec);
+                                else if(on_error)
+									on_error(ec);
                             });
                         }
-                        else if(onerror)
-                            onerror(ec);
+                        else if(on_error)
+							on_error(ec);
                     });
                 }
-                else if(onerror)
-                    onerror(ec);
+                else if(on_error)
+					on_error(ec);
             });
         }
     };

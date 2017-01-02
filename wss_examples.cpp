@@ -6,7 +6,8 @@ using WssClient = webpp::SocketClient<webpp::WSS>;
 
 int main() {
     //WebSocket Secure (WSS)-server at port 8080 using 1 thread
-    WssServer server(8080, "server.crt", "server.key");
+	WssServer server("server.crt", "server.key");
+	server.config.port = 8080;
     
     //Example 1: echo WebSocket Secure endpoint
     //  Added debug messages for example use of the callbacks
@@ -16,7 +17,7 @@ int main() {
     //    wss.send("test");
     auto& echo=server.endpoint["^/echo/?$"];
     
-    echo.onmessage=[&server](auto connection, auto message) {
+    echo.on_message=[&server](auto connection, auto message) {
         //WssServer::Message::string() is a convenience function for:
         //stringstream data_ss;
         //data_ss << message->rdbuf();
@@ -39,17 +40,17 @@ int main() {
         });
     };
     
-    echo.onopen=[](auto connection) {
+    echo.on_open=[](auto connection) {
         std::cout << "Server: Opened connection " << size_t(connection.get()) << std::endl;
     };
     
     //See RFC 6455 7.4.1. for status codes
-    echo.onclose=[](auto connection, int status, const std::string& /*reason*/) {
+    echo.on_close=[](auto connection, int status, const std::string& /*reason*/) {
         std::cout << "Server: Closed connection " << size_t(connection.get()) << " with status code " << status << std::endl;
     };
     
     //See http://www.boost.org/doc/libs/1_55_0/doc/html/boost_asio/reference.html, Error Codes for error code meanings
-    echo.onerror=[](auto connection, const std::error_code& ec) {
+    echo.on_error=[](auto connection, const std::error_code& ec) {
         std::cout << "Server: Error in connection " << size_t(connection.get()) << ". " <<
                 "Error: " << ec << ", error message: " << ec.message() << std::endl;
     };
@@ -61,7 +62,7 @@ int main() {
     //    wss.onmessage=function(evt){console.log(evt.data);};
     //    wss.send("test");
     auto& echo_thrice=server.endpoint["^/echo_thrice/?$"];
-    echo_thrice.onmessage=[&server](auto connection, auto message) {
+    echo_thrice.on_message=[&server](auto connection, auto message) {
         auto message_str=message->string();
         
         auto send_stream1 = std::make_shared<WssServer::SendStream>();
@@ -87,7 +88,7 @@ int main() {
     //    wss.onmessage=function(evt){console.log(evt.data);};
     //    wss.send("test");
     auto& echo_all=server.endpoint["^/echo_all/?$"];
-    echo_all.onmessage=[&server](auto /*connection*/, auto message) {
+    echo_all.on_message=[&server](auto /*connection*/, auto message) {
         auto message_str=message->string();
         
         //echo_all.get_connections() can also be used to solely receive connections on this endpoint
@@ -121,7 +122,7 @@ int main() {
     //Server: Closed connection 140184920260656 with status code 1000
     //Client: Closed connection with status code 1000
     WssClient client("localhost:8080/echo", false);
-    client.onmessage=[&client](auto message) {
+    client.on_message=[&client](auto message) {
         auto message_str=message->string();
 
         std::cout << "Client: Message received: \"" << message_str << "\"" << std::endl;
@@ -130,7 +131,7 @@ int main() {
         client.send_close(1000);
     };
     
-    client.onopen=[&client]() {
+    client.on_open=[&client]() {
         std::cout << "Client: Opened connection" << std::endl;
 
         std::string message="Hello";
@@ -141,12 +142,12 @@ int main() {
         client.send(send_stream);
     };
     
-    client.onclose=[](int status, const std::string& /*reason*/) {
+    client.on_close=[](int status, const std::string& /*reason*/) {
         std::cout << "Client: Closed connection with status code " << status << std::endl;
     };
     
     //See http://www.boost.org/doc/libs/1_55_0/doc/html/boost_asio/reference.html, Error Codes for error code meanings
-    client.onerror=[](const std::error_code& ec) {
+    client.on_error=[](const std::error_code& ec) {
         std::cout << "Client: Error: " << ec << ", error message: " << ec.message() << std::endl;
     };
     

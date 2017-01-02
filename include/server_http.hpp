@@ -9,6 +9,7 @@
 #include "asio/system_timer.hpp"
 #include "path_to_regex.hpp"
 
+#include <map>
 #include <unordered_map>
 #include <thread>
 #include <functional>
@@ -16,7 +17,33 @@
 #include <sstream>
 #include <regex>
 
+#ifndef CASE_INSENSITIVE_EQUALS_AND_HASH
+#define CASE_INSENSITIVE_EQUALS_AND_HASH
+class case_insensitive_equals {
+public:
+	bool operator()(const std::string &key1, const std::string &key2) const {
+		return key1.size() == key2.size()
+			&& equal(key1.cbegin(), key1.cend(), key2.cbegin(),
+				[](std::string::value_type key1v, std::string::value_type key2v)
+		{ return tolower(key1v) == tolower(key2v); });
+	}
+};
+class case_insensitive_hash {
+public:
+	size_t operator()(const std::string &key) const {
+		size_t seed = 0;
+		for (auto &c : key) {
+			std::hash<char> hasher;
+			seed ^= hasher(std::tolower(c)) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+		}
+		return seed;
+	}
+};
+#endif
 namespace webpp {
+	template <class socket_type>
+	class Server;
+
     template <class socket_type>
     class ServerBase {
     public:
@@ -80,33 +107,13 @@ namespace webpp {
         
         class Request {
             friend class ServerBase<socket_type>;
-            
-            class iequal_to {
-            public:
-              bool operator()(const std::string &key1, const std::string &key2) const {
-				   return key1.size() == key2.size()
-						&& equal(key1.cbegin(), key1.cend(), key2.cbegin(),
-							[](std::string::value_type key1v, std::string::value_type key2v)
-								{ return tolower(key1v) == tolower(key2v); });
-              }
-            };
-            class ihash {
-            public:
-              size_t operator()(const std::string &key) const {
-                size_t seed=0;
-                for(auto &c: key) {
-				  std::hash<char> hasher;
-				  seed ^= hasher(std::tolower(c)) + 0x9e3779b9 + (seed<<6) + (seed>>2);
-				}
-                return seed;
-              }
-            };
+			friend class Server<socket_type>;           
         public:
             std::string method, path, http_version;
 
             Content content;
 
-            std::unordered_multimap<std::string, std::string, ihash, iequal_to> header;
+            std::unordered_multimap<std::string, std::string, case_insensitive_hash, case_insensitive_equals> header;
 
 			path2regex::Keys keys;
 			std::map<std::string, std::string> params;
@@ -115,65 +122,64 @@ namespace webpp {
             unsigned short remote_endpoint_port;
             
         private:
-            Request(): content(streambuf), remote_endpoint_port(0) { }
-            
+			Request(const socket_type &socket): content(streambuf) {
+                try {
+                    remote_endpoint_address=socket.lowest_layer().remote_endpoint().address().to_string();
+                    remote_endpoint_port=socket.lowest_layer().remote_endpoint().port();
+                }
+                catch(...) {}
+            }            
             asio::streambuf streambuf;
         };
         
         class Config {
             friend class ServerBase<socket_type>;
 
-            Config(unsigned short port): port(port), reuse_address(true) {}
+			Config(unsigned short port) : port(port) {}
         public:
+			/// Port number to use. Defaults to 80 for HTTP and 443 for HTTPS.
             unsigned short port;
-            ///IPv4 address in dotted decimal form or IPv6 address in hexadecimal notation.
-            ///If empty, the address will be any address.
+            /// Number of threads that the server will use when start() is called. Defaults to 1 thread.
+            size_t thread_pool_size=1;
+            /// Timeout on request handling. Defaults to 5 seconds.
+            size_t timeout_request=5;
+            /// Timeout on content handling. Defaults to 300 seconds.
+            size_t timeout_content=300;
+            /// IPv4 address in dotted decimal form or IPv6 address in hexadecimal notation.
+            /// If empty, the address will be any address.
             std::string address;
-            ///Set to false to avoid binding the socket to an address that is already in use.
-            bool reuse_address;
+            /// Set to false to avoid binding the socket to an address that is already in use. Defaults to true.
+            bool reuse_address=true;
         };
         ///Set before calling start().
         Config m_config;
+		private:
+		  class regex_orderable : public std::regex {
+			  std::string str;
+		  public:
+			  regex_orderable(const char *regex_cstr) : std::regex(regex_cstr), str(regex_cstr) {}
+			  regex_orderable(const std::string &regex_str) : std::regex(regex_str), str(regex_str) {}
+			  bool operator<(const regex_orderable &rhs) const {
+				  return str<rhs.str;
+			  }
+		  };
         using http_handler = std::function<void(std::shared_ptr<Response>, std::shared_ptr<Request>)>;
     	
-		template<class T> void on_get(std::string regex, T&& func) { m_resource[regex]["GET"] = func; }
+	public:
+		template<class T> void on_get(std::string regex, T&& func) { path2regex::Keys keys; path2regex::path_to_regex(regex, keys); m_resource[regex]["GET"] = std::make_tuple(std::move(keys), func); }
 		template<class T> void on_get(T&& func) { m_default_resource["GET"] = func; }
-		template<class T> void on_post(std::string regex, T&& func) { m_resource[regex]["POST"] = func; }
+		template<class T> void on_post(std::string regex, T&& func) { path2regex::Keys keys; path2regex::path_to_regex(regex, keys); m_resource[regex]["POST"] = std::make_tuple(std::move(keys), func); }
 		template<class T> void on_post(T&& func) { m_default_resource["POST"] = func; }
-        
+
+    	std::function<void(std::shared_ptr<typename ServerBase<socket_type>::Request>, const std::error_code&)> on_error;
+		
+    	std::function<void(std::shared_ptr<socket_type> socket, std::shared_ptr<typename ServerBase<socket_type>::Request>)> on_upgrade;
 	private:
-		std::unordered_map<std::string, std::unordered_map<std::string, http_handler>>  m_resource;
+		std::map<regex_orderable, std::map<std::string, std::tuple<path2regex::Keys, http_handler>>>  m_resource;
         
-        std::unordered_map<std::string, http_handler> m_default_resource;
-        
-        std::function<void(const std::exception&)> m_exception_handler;
-
-        std::vector<std::pair<std::string, std::vector<std::tuple<std::regex, path2regex::Keys, http_handler>>>> m_opt_resource;
-        
+        std::map<std::string, http_handler> m_default_resource;
     public:
-        void start() {
-            //Copy the resources to opt_resource for more efficient request processing
-            m_opt_resource.clear();
-            for(auto& res: m_resource) {
-                for(auto& res_method: res.second) {
-                    auto it=m_opt_resource.end();
-                    for(auto opt_it=m_opt_resource.begin();opt_it!=m_opt_resource.end();++opt_it) {
-                        if(res_method.first==opt_it->first) {
-                            it=opt_it;
-                            break;
-                        }
-                    }
-                    if(it==m_opt_resource.end()) {
-                        m_opt_resource.emplace_back();
-                        it=m_opt_resource.begin()+(m_opt_resource.size()-1);
-                        it->first=res_method.first;
-                    }
-					path2regex::Keys keys;
-					std::regex regex = path2regex::path_to_regex(res.first, keys);
-                    it->second.emplace_back(std::make_tuple(std::move(regex), std::move(keys), res_method.second));
-                }
-            }
-
+        virtual void start() {
             if(!m_io_context)
                 m_io_context=std::make_shared<asio::io_context>();
 
@@ -224,14 +230,8 @@ namespace webpp {
 		bool m_external_context;
         std::unique_ptr<asio::ip::tcp::acceptor> acceptor;
         std::vector<std::thread> threads;
-        
-        long timeout_request;
-        long timeout_content;
-        
-        ServerBase(unsigned short port, long timeout_request, long timeout_send_or_receive) :
-		    m_config(port), m_external_context(false), timeout_request(timeout_request), timeout_content(timeout_send_or_receive)
-	    {
-	    }
+                
+		ServerBase(unsigned short port) : m_config(port), m_external_context(false) {}
 
         virtual void accept()=0;
         
@@ -253,18 +253,10 @@ namespace webpp {
         void read_request_and_content(const std::shared_ptr<socket_type> &socket) {
             //Create new streambuf (Request::streambuf) for async_read_until()
             //shared_ptr is used to pass temporary objects to the asynchronous functions
-            std::shared_ptr<Request> request(new Request());
-            try {
-                request->remote_endpoint_address = socket->lowest_layer().remote_endpoint().address().to_string();
-                request->remote_endpoint_port = socket->lowest_layer().remote_endpoint().port();
-            }
-            catch(const std::exception &e) {
-                if(m_exception_handler)
-                   m_exception_handler(e);
-            }
+			std::shared_ptr<Request> request(new Request(*socket));
 
             //Set timeout on the following asio::async-read or write function
-			auto timer = get_timeout_timer(socket, timeout_request);
+			auto timer = get_timeout_timer(socket, m_config.timeout_request);
                         
             asio::async_read_until(*socket, request->streambuf, "\r\n\r\n",
                     [this, socket, request, timer](const std::error_code& ec, size_t bytes_transferred) {
@@ -277,43 +269,47 @@ namespace webpp {
                     //streambuf (maybe some bytes of the content) is appended to in the async_read-function below (for retrieving content).
                     size_t num_additional_bytes=request->streambuf.size()-bytes_transferred;
                     
-                    if(!parse_request(request))
-                        return;
-                    
-                    //If content, read that as well
-                    auto it=request->header.find("Content-Length");
-                    if(it!=request->header.end()) {
-                        unsigned long long content_length;
-                        try {
-                            content_length=stoull(it->second);
-                        }
-                        catch(const std::exception &e) {
-                            if(m_exception_handler)
-                                m_exception_handler(e);
-                            return;
-                        }
-                        if(content_length>num_additional_bytes) {
+					if (!parse_request(request))
+						return;
+
+					//If content, read that as well
+					auto it = request->header.find("Content-Length");
+					if (it != request->header.end()) {
+						unsigned long long content_length;
+						try {
+							content_length = stoull(it->second);
+						}
+						catch (const std::exception &) {
+							if (on_error)
+								on_error(request, std::error_code(int(std::errc::protocol_error), std::generic_category()));
+							return;
+						}
+						if (content_length > num_additional_bytes) {
 							//Set timeout on the following asio::async-read or write function
-							auto timer2 = get_timeout_timer(socket, timeout_request);
-                            asio::async_read(*socket, request->streambuf,
-                                    asio::transfer_exactly(size_t(content_length)-num_additional_bytes),
-                                    [this, socket, request, timer2]
-                                    (const std::error_code& ec, size_t /*bytes_transferred*/) {
-                                if(timer2)
-                                    timer2->cancel();
-                                if(!ec)
-                                    find_resource(socket, request);
-                            });
-                        }
-                        else {
-                            find_resource(socket, request);
-                        }
-                    }
-                    else {
-                        find_resource(socket, request);
-                    }
+							auto timer2 = get_timeout_timer(socket, m_config.timeout_content);
+							asio::async_read(*socket, request->streambuf,
+								asio::transfer_exactly(size_t(content_length) - num_additional_bytes),
+								[this, socket, request, timer2]
+							(const std::error_code& ec, size_t /*bytes_transferred*/) {
+								if (timer2)
+									timer2->cancel();
+								if (!ec)
+									find_resource(socket, request);
+								else if (on_error)
+									on_error(request, ec);
+							});
+						}
+						else {
+							find_resource(socket, request);
+						}
+					}
+					else {
+						find_resource(socket, request);
+					}
                 }
-            });
+				else if (on_error)
+					on_error(request, ec);
+			});
         }
 
         bool parse_request(const std::shared_ptr<Request> &request) const {
@@ -328,7 +324,7 @@ namespace webpp {
 
                     size_t protocol_end;
                     if((protocol_end=line.find('/', path_end+1))!=std::string::npos) {
-                        if(line.substr(path_end+1, protocol_end-path_end-1)!="HTTP")
+                        if(line.compare(path_end+1, protocol_end-path_end-1, "HTTP")!=0)
                             return false;
                         request->http_version=line.substr(protocol_end+1, line.size()-protocol_end-2);
                     }
@@ -343,7 +339,7 @@ namespace webpp {
                             if(line[value_start]==' ')
                                 value_start++;
                             if(value_start<line.size())
-                                request->header.insert(make_pair(line.substr(0, param_end), line.substr(value_start, line.size()-value_start-1)));
+                                request->header.emplace(line.substr(0, param_end), line.substr(value_start, line.size() - value_start - 1));
                         }
     
                         getline(request->content, line);
@@ -358,25 +354,32 @@ namespace webpp {
         }
 
         void find_resource(const std::shared_ptr<socket_type> &socket, const std::shared_ptr<Request> &request) {
-            //Find path- and method-match, and call write_response
-            for(auto& res: m_opt_resource) {
-                if(request->method==res.first) {
-                    for(auto& res_path: res.second) {
-                        std::smatch sm_res;
-                        if(std::regex_match(request->path, sm_res, std::get<0>(res_path))) {
-							request->keys = std::get<1>(res_path);							
-							for (size_t i = 0; i < request->keys.size(); i++) {
-								request->params.insert(std::pair<std::string,std::string>(request->keys[i].name, sm_res[i + 1]));
-							}
-                            write_response(socket, request, std::get<2>(res_path));
-                            return;
-                        }
-                    }
+            //Upgrade connection
+            if(on_upgrade) {
+                auto it=request->header.find("Upgrade");
+                if(it!=request->header.end()) {
+                    on_upgrade(socket, request);
+                    return;
                 }
             }
-            auto it_method=m_default_resource.find(request->method);
-            if(it_method!=m_default_resource.end()) {
-                write_response(socket, request, it_method->second);
+            //Find path- and method-match, and call write_response
+            for(auto& regex_method : m_resource) {
+				auto it = regex_method.second.find(request->method);
+				if (it != regex_method.second.end()) {
+                        std::smatch sm_res;				
+						if (std::regex_match(request->path, sm_res, regex_method.first)) {
+							request->keys = std::get<0>(it->second);
+							for (size_t i = 0; i < request->keys.size(); i++) {
+								request->params.insert(std::pair<std::string, std::string>(request->keys[i].name, sm_res[i + 1]));
+							}
+							write_response(socket, request, std::get<1>(it->second));
+							return;
+						}
+                }
+            }
+            auto it=m_default_resource.find(request->method);
+            if(it!=m_default_resource.end()) {
+                write_response(socket, request, it->second);
             }
         }
         bool iequals(const std::string &key1, const std::string &key2) const {
@@ -388,41 +391,43 @@ namespace webpp {
 							
         void write_response(const std::shared_ptr<socket_type> &socket, const std::shared_ptr<Request> &request, http_handler& resource_function) {
             //Set timeout on the following asio::async-read or write function
-			auto timer = get_timeout_timer(socket, timeout_request);
+			auto timer = get_timeout_timer(socket, m_config.timeout_content);
 
             auto response=std::shared_ptr<Response>(new Response(socket), [this, request, timer](Response *response_ptr) {
                 auto response=std::shared_ptr<Response>(response_ptr);
                 send(response, [this, response, request, timer](const std::error_code& ec) {
 					if (timer)
 						timer->cancel();
-					if(!ec) {
-                        float http_version;
-                        try {
-                            http_version=stof(request->http_version);
-                        }
-                        catch(const std::exception &e){
-                            if(m_exception_handler)
-                                m_exception_handler(e);
-                            return;
-                        }
-                        
-                        auto range=request->header.equal_range("Connection");
-                        for(auto it=range.first;it!=range.second; ++it) {
-                            if(iequals(it->second, "close"))
-                                return;
-                        }
-                        if(http_version>1.05)
-                            read_request_and_content(response->socket());
-                    }
+					if (!ec) {
+						float http_version;
+						try {
+							http_version = stof(request->http_version);
+						}
+						catch (const std::exception &) {
+							if (on_error)
+								on_error(request, std::error_code(int(std::errc::protocol_error), std::generic_category()));
+							return;
+						}
+
+						auto range = request->header.equal_range("Connection");
+						for (auto it = range.first; it != range.second; ++it) {
+							if (iequals(it->second, "close"))
+								return;
+						}
+						if (http_version > 1.05)
+							read_request_and_content(response->socket());
+					}
+					else if (on_error)
+						on_error(request, ec);
                 });
             });
 
             try {
                 resource_function(response, request);
             }
-            catch(const std::exception &e) {
-                if(m_exception_handler)
-                    m_exception_handler(e);
+            catch(const std::exception &) {
+				if (on_error)
+					on_error(request, std::error_code(int(std::errc::protocol_error), std::generic_category()));
             }
         }
     };
@@ -440,10 +445,8 @@ namespace webpp {
     
     template<>
     class Server<HTTP> : public ServerBase<HTTP> {
-    public:
-	    explicit Server(unsigned short port, long timeout_request=5, long timeout_content=300) :
-                ServerBase(port, timeout_request, timeout_content) {}
-        
+    public:	    
+    	Server() : ServerBase<HTTP>::ServerBase(80) {}
     protected:
         void accept() override {
             //Create new socket for this connection
@@ -460,7 +463,8 @@ namespace webpp {
                     socket->set_option(option);
                     
                     read_request_and_content(socket);
-                }
+                } else if (on_error)
+					on_error(std::shared_ptr<Request>(new Request(*socket)), ec);
             });
         }
     };

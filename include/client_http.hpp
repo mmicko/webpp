@@ -11,9 +11,35 @@
 #include <map>
 #include <random>
 #include <mutex>
-#include <type_traits>
+
+#ifndef CASE_INSENSITIVE_EQUALS_AND_HASH
+#define CASE_INSENSITIVE_EQUALS_AND_HASH
+class case_insensitive_equals {
+public:
+	bool operator()(const std::string &key1, const std::string &key2) const {
+		return key1.size() == key2.size()
+			&& equal(key1.cbegin(), key1.cend(), key2.cbegin(),
+				[](std::string::value_type key1v, std::string::value_type key2v)
+		{ return tolower(key1v) == tolower(key2v); });
+	}
+};
+class case_insensitive_hash {
+public:
+	size_t operator()(const std::string &key) const {
+		size_t seed = 0;
+		for (auto &c : key) {
+			std::hash<char> hasher;
+			seed ^= hasher(std::tolower(c)) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+		}
+		return seed;
+	}
+};
+#endif
 
 namespace webpp {
+	template <class socket_type>
+	class Client;
+
     template <class socket_type>
     class ClientBase {
     public:
@@ -21,33 +47,13 @@ namespace webpp {
 
         class Response {
             friend class ClientBase<socket_type>;
-            
-            class iequal_to {
-            public:
-              bool operator()(const std::string &key1, const std::string &key2) const {
-			   return key1.size() == key2.size()
-					&& equal(key1.cbegin(), key1.cend(), key2.cbegin(),
-						[](std::string::value_type key1v, std::string::value_type key2v)
-							{ return tolower(key1v) == tolower(key2v); });
-              }
-            };
-            class ihash {
-            public:
-              size_t operator()(const std::string &key) const {
-                size_t seed=0;
-                for(auto &c: key) {
-				  std::hash<char> hasher;
-				  seed ^= hasher(std::tolower(c)) + 0x9e3779b9 + (seed<<6) + (seed>>2);
-				}
-                return seed;
-              }
-            };
+			friend class Client<socket_type>;           
         public:
             std::string http_version, status_code;
 
             std::istream content;
 
-            std::unordered_multimap<std::string, std::string, ihash, iequal_to> header;
+            std::unordered_multimap<std::string, std::string, case_insensitive_hash, case_insensitive_equals> header;
             
         private:
             asio::streambuf content_buffer;
@@ -393,8 +399,11 @@ namespace webpp {
 							socket = std::make_unique<HTTP>(io_context);
 						}
 
-                        asio::async_connect(*socket, it, [this]
+						auto timer = get_timeout_timer();
+                    	asio::async_connect(*socket, it, [this,timer]
                                 (const std::error_code &ec, asio::ip::tcp::resolver::iterator /*it*/){
+							if (timer)
+								timer->cancel();
                             if(!ec) {
                                 asio::ip::tcp::no_delay option(true);
                                 socket->set_option(option);
