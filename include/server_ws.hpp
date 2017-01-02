@@ -1,9 +1,11 @@
+// license:MIT
+// copyright-holders:Ole Christian Eidheim, Miodrag Milanovic
 #ifndef SERVER_WS_HPP
 #define SERVER_WS_HPP
 
 #include "crypto.hpp"
 
-#include "asio_wrapper.hpp"
+#include "asio.h"
 #include "asio/system_timer.hpp"
 
 #include <unordered_map>

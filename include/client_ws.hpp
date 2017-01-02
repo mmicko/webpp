@@ -1,7 +1,9 @@
+// license:MIT
+// copyright-holders:Ole Christian Eidheim, Miodrag Milanovic
 #ifndef CLIENT_WS_HPP
 #define CLIENT_WS_HPP
 
-#include "asio_wrapper.hpp"
+#include "asio.h"
 
 #include <unordered_map>
 #include <iostream>

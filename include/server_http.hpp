@@ -1,3 +1,5 @@
+// license:MIT
+// copyright-holders:Ole Christian Eidheim, Miodrag Milanovic
 #ifndef SERVER_HTTP_HPP
 #define SERVER_HTTP_HPP
 
@@ -5,7 +7,7 @@
 #pragma warning(disable:4503)
 #endif
 
-#include "asio_wrapper.hpp"
+#include "asio.h"
 #include "asio/system_timer.hpp"
 #include "path_to_regex.hpp"
 

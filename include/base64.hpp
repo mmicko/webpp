@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:René Nyffenegger
 /*
    base64.cpp and base64.h
 

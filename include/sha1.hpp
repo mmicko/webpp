@@ -1,3 +1,5 @@
+// license:BSD-3-Clause
+// copyright-holders:Micael Hildenborg
 /*
  Copyright (c) 2011, Micael Hildenborg
  All rights reserved.

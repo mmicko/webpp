@@ -25,11 +25,11 @@ if( MSYS OR MINGW)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wa,-mbig-obj")
 endif()
 
-set(HTTP_HEADERS  include/asio_wrapper.hpp include/server_http.hpp  include/client_http.hpp  3rdparty/path_to_regex/path_to_regex.hpp)
-set(HTTPS_HEADERS include/asio_wrapper.hpp include/server_https.hpp include/client_https.hpp 3rdparty/path_to_regex/path_to_regex.hpp)
+set(HTTP_HEADERS  include/asio.h include/server_http.hpp  include/client_http.hpp  3rdparty/path_to_regex/path_to_regex.hpp)
+set(HTTPS_HEADERS include/asio.h include/server_https.hpp include/client_https.hpp 3rdparty/path_to_regex/path_to_regex.hpp)
 
-set(WS_HEADERS  include/asio_wrapper.hpp include/sha1.hpp include/crypto.hpp include/base64.hpp include/server_ws.hpp  include/client_ws.hpp )
-set(WSS_HEADERS include/asio_wrapper.hpp include/sha1.hpp include/crypto.hpp include/base64.hpp include/server_wss.hpp include/client_wss.hpp)
+set(WS_HEADERS  include/asio.h include/sha1.hpp include/crypto.hpp include/base64.hpp include/server_ws.hpp  include/client_ws.hpp )
+set(WSS_HEADERS include/asio.h include/sha1.hpp include/crypto.hpp include/base64.hpp include/server_wss.hpp include/client_wss.hpp)
 
 if(OPENSSL_FOUND)
     include_directories(SYSTEM ${OPENSSL_INCLUDE_DIR})

@@ -1,3 +1,5 @@
+// license:MIT
+// copyright-holders:Ole Christian Eidheim, Miodrag Milanovic
 #ifndef CLIENT_HTTPS_HPP
 #define CLIENT_HTTPS_HPP
 

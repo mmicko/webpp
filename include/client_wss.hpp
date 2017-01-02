@@ -1,3 +1,5 @@
+// license:MIT
+// copyright-holders:Ole Christian Eidheim, Miodrag Milanovic
 #ifndef CLIENT_WSS_HPP
 #define CLIENT_WSS_HPP
 

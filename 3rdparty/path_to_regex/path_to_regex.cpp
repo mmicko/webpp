@@ -1,3 +1,5 @@
+// license:Apache-2
+// copyright-holders:Alfred Bratterud
 // This file is a part of the IncludeOS unikernel - www.includeos.org
 //
 // Copyright 2015-2016 Oslo and Akershus University College of Applied Sciences

@@ -1,3 +1,5 @@
+// license:MIT
+// copyright-holders:Ole Christian Eidheim, Miodrag Milanovic
 #include "server_https.hpp"
 #include "client_https.hpp"
 

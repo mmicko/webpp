@@ -1,3 +1,5 @@
+// license:MIT
+// copyright-holders:Miodrag Milanovic
 #ifndef CRYPTO_HPP
 #define CRYPTO_HPP
 
