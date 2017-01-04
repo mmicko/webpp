@@ -305,7 +305,7 @@ namespace webpp {
 						}
 						catch (const std::exception &) {
 							if (on_error)
-								on_error(request, std::error_code(int(std::errc::protocol_error), std::generic_category()));
+								on_error(request, std::error_code(EPROTO, std::generic_category()));
 							return;
 						}
 						if (content_length > num_additional_bytes) {
@@ -424,7 +424,7 @@ namespace webpp {
 						}
 						catch (const std::exception &) {
 							if (on_error)
-								on_error(request, std::error_code(int(std::errc::protocol_error), std::generic_category()));
+								on_error(request, std::error_code(EPROTO, std::generic_category()));
 							return;
 						}
 
@@ -447,7 +447,7 @@ namespace webpp {
 			}
 			catch(const std::exception &) {
 				if (on_error)
-					on_error(request, std::error_code(int(std::errc::protocol_error), std::generic_category()));
+					on_error(request, std::error_code(EPROTO, std::generic_category()));
 			}
 		}
 	};
