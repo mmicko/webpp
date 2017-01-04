@@ -163,6 +163,7 @@ namespace webpp {
 			  bool operator<(const regex_orderable &rhs) const {
 				  return str<rhs.str;
 			  }
+			  std::string getstr() const { return str; }
 		  };
 		using http_handler = std::function<void(std::shared_ptr<Response>, std::shared_ptr<Request>)>;
 
@@ -178,6 +179,18 @@ namespace webpp {
 		template<class T> void on_delete(std::string regex, T&& func) { std::lock_guard<std::mutex> lock(m_resource_mutex); path2regex::Keys keys; auto reg = path2regex::path_to_regex(regex, keys); m_resource[regex_orderable(reg, regex)]["DELETE"] = std::make_tuple(std::move(keys), func); }
 		template<class T> void on_delete(T&& func) { std::lock_guard<std::mutex> lock(m_resource_mutex); m_default_resource["DELETE"] = func; }
 
+		void remove_handler(std::string regex)
+		{
+			std::lock_guard<std::mutex> lock(m_resource_mutex);
+			for (auto &it = m_resource.begin(); it != m_resource.end(); ++it)
+			{
+				if (it->first.getstr() == regex)
+				{
+					m_resource.erase(it);
+					break;
+				}
+			}
+		}
 
 		std::function<void(std::shared_ptr<typename ServerBase<socket_type>::Request>, const std::error_code&)> on_error;
 
@@ -365,7 +378,7 @@ namespace webpp {
 		}
 
 		void find_resource(const std::shared_ptr<socket_type> &socket, const std::shared_ptr<Request> &request) {
-			//std::lock_guard<std::mutex> lock(m_resource_mutex);
+			std::lock_guard<std::mutex> lock(m_resource_mutex);
 			//Upgrade connection
 			if(on_upgrade) {
 				auto it=request->header.find("Upgrade");

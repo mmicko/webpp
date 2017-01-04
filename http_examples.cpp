@@ -235,6 +235,10 @@ int main() {
 	auto r3=client.request("POST", "/json", json_string);
 	std::cout << r3->content.rdbuf() << std::endl;
 
+	server.remove_handler("/match/:id(\\d+)");
+	auto r4 = client.request("GET", "/match/123");
+//	std::cout << r4->content.rdbuf() << std::endl;
+
 	server_thread.join();
 
 	return 0;
