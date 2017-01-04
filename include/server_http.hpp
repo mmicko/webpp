@@ -172,6 +172,13 @@ namespace webpp {
 		template<class T> void on_get(T&& func) { m_default_resource["GET"] = func; }
 		template<class T> void on_post(std::string regex, T&& func) { path2regex::Keys keys; path2regex::path_to_regex(regex, keys); m_resource[regex]["POST"] = std::make_tuple(std::move(keys), func); }
 		template<class T> void on_post(T&& func) { m_default_resource["POST"] = func; }
+		template<class T> void on_put(std::string regex, T&& func) { path2regex::Keys keys; path2regex::path_to_regex(regex, keys); m_resource[regex]["PUT"] = std::make_tuple(std::move(keys), func); }
+		template<class T> void on_put(T&& func) { m_default_resource["PUT"] = func; }
+		template<class T> void on_patch(std::string regex, T&& func) { path2regex::Keys keys; path2regex::path_to_regex(regex, keys); m_resource[regex]["PATCH"] = std::make_tuple(std::move(keys), func); }
+		template<class T> void on_patch(T&& func) { m_default_resource["PATCH"] = func; }
+		template<class T> void on_delete(std::string regex, T&& func) { path2regex::Keys keys; path2regex::path_to_regex(regex, keys); m_resource[regex]["DELETE"] = std::make_tuple(std::move(keys), func); }
+		template<class T> void on_delete(T&& func) { m_default_resource["DELETE"] = func; }
+
 
 		std::function<void(std::shared_ptr<typename ServerBase<socket_type>::Request>, const std::error_code&)> on_error;
 
