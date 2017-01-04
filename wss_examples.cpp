@@ -3,12 +3,9 @@
 #include "server_wss.hpp"
 #include "client_wss.hpp"
 
-using WssServer = webpp::SocketServer<webpp::WSS>;
-using WssClient = webpp::SocketClient<webpp::WSS>;
-
 int main() {
 	//WebSocket Secure (WSS)-server at port 8080 using 1 thread
-	WssServer server("server.crt", "server.key");
+	webpp::wss_server server("server.crt", "server.key");
 	server.config.port = 8080;
 
 	//Example 1: echo WebSocket Secure endpoint
@@ -30,7 +27,7 @@ int main() {
 
 		std::cout << "Server: Sending message \"" << message_str <<  "\" to " << size_t(connection.get()) << std::endl;
 
-		auto send_stream = std::make_shared<WssServer::SendStream>();
+		auto send_stream = std::make_shared<webpp::wss_server::SendStream>();
 		*send_stream << message_str;
 		//server.send is an asynchronous function
 		server.send(connection, send_stream, [](const std::error_code& ec){
@@ -67,18 +64,18 @@ int main() {
 	echo_thrice.on_message=[&server](auto connection, auto message) {
 		auto message_str=message->string();
 
-		auto send_stream1 = std::make_shared<WssServer::SendStream>();
+		auto send_stream1 = std::make_shared<webpp::wss_server::SendStream>();
 		*send_stream1 << message_str;
 		//server.send is an asynchronous function
 		server.send(connection, send_stream1, [&server, connection, message_str](const std::error_code& ec) {
 			if(!ec) {
-				auto send_stream3 = std::make_shared<WssServer::SendStream>();
+				auto send_stream3 = std::make_shared<webpp::wss_server::SendStream>();
 				*send_stream3 << message_str;
 				server.send(connection, send_stream3); //Sent after send_stream1 is sent, and most likely after send_stream2
 			}
 		});
 		//Do not reuse send_stream1 here as it most likely is not sent yet
-		auto send_stream2 = std::make_shared<WssServer::SendStream>();
+		auto send_stream2 = std::make_shared<webpp::wss_server::SendStream>();
 		*send_stream2 << message_str;
 		server.send(connection, send_stream2); //Most likely queued, and sent after send_stream1
 	};
@@ -95,7 +92,7 @@ int main() {
 
 		//echo_all.get_connections() can also be used to solely receive connections on this endpoint
 		for(auto a_connection: server.get_connections()) {
-			auto send_stream = std::make_shared<WssServer::SendStream>();
+			auto send_stream = std::make_shared<webpp::wss_server::SendStream>();
 			*send_stream << message_str;
 
 			//server.send is an asynchronous function
@@ -123,7 +120,7 @@ int main() {
 	//Client: Sending close connection
 	//Server: Closed connection 140184920260656 with status code 1000
 	//Client: Closed connection with status code 1000
-	WssClient client("localhost:8080/echo", false);
+	webpp::wss_client client("localhost:8080/echo", false);
 	client.on_message=[&client](auto message) {
 		auto message_str=message->string();
 
@@ -139,7 +136,7 @@ int main() {
 		std::string message="Hello";
 		std::cout << "Client: Sending message: \"" << message << "\"" << std::endl;
 
-		auto send_stream = std::make_shared<WssClient::SendStream>();
+		auto send_stream = std::make_shared<webpp::wss_client::SendStream>();
 		*send_stream << message;
 		client.send(send_stream);
 	};

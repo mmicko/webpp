@@ -704,5 +704,10 @@ namespace webpp {
 			});
 		}
 	};
+
+	class ws_server : public SocketServer<WS> {
+	public:
+		ws_server() : SocketServer<WS>::SocketServer() {}
+	};
 }
 #endif  /* SERVER_WS_HPP */
