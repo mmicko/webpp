@@ -86,6 +86,12 @@ namespace webpp {
 			});
 		}
 	};
+
+	class https_server : public Server<HTTPS> {
+	public:
+		explicit https_server(const std::string& cert_file, const std::string& private_key_file, const std::string& verify_file = std::string()) : Server<HTTPS>::Server(cert_file, private_key_file, verify_file) {}
+	};
+
 }
 
 

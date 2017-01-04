@@ -428,6 +428,11 @@ namespace webpp {
 			}
 		}
 	};
+
+	class http_client : public Client<HTTP> {
+	public:
+		explicit http_client(const std::string& server_port_path) : Client<HTTP>::Client(server_port_path) {}
+	};
 }
 
 #endif  /* CLIENT_HTTP_HPP */

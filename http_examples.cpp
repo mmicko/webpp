@@ -97,15 +97,12 @@ std::string extension_to_type(const std::string& extension)
 	return "text/plain";
 }
 
-using HttpServer = webpp::Server<webpp::HTTP>;
-using HttpClient = webpp::Client<webpp::HTTP>;
-
 int main() {
 	std::shared_ptr<asio::io_context> io_context = std::make_shared<asio::io_context>();
 	//HTTP-server at port 8080 using 1 thread
 	//Unless you do more heavy non-threaded processing in the resources,
 	//1 thread is usually faster than several threads
-	HttpServer server;
+	webpp::http_server server;
 	server.m_config.port = 8080;
 
 	server.set_io_context(io_context);
@@ -224,7 +221,7 @@ int main() {
 	std::this_thread::sleep_for(std::chrono::seconds(1));
 
 	//Client examples
-	HttpClient client("localhost:8080");
+	webpp::http_client client("localhost:8080");
 	auto r1=client.request("GET", "/match/123");
 	std::cout << r1->content.rdbuf() << std::endl;
 

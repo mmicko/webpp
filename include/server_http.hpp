@@ -488,5 +488,10 @@ namespace webpp {
 			});
 		}
 	};
+
+	class http_server : public Server<HTTP> {
+	public:
+		http_server() : Server<HTTP>::Server() {}
+	};
 }
 #endif  /* SERVER_HTTP_HPP */

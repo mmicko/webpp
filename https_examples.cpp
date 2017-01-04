@@ -3,15 +3,11 @@
 #include "server_https.hpp"
 #include "client_https.hpp"
 
-using HttpsServer = webpp::Server<webpp::HTTPS>;
-using HttpsClient = webpp::Client<webpp::HTTPS>;
-
-
 int main() {
 	//HTTPS-server at port 8080 using 1 thread
 	//Unless you do more heavy non-threaded processing in the resources,
 	//1 thread is usually faster than several threads
-	HttpsServer server("server.crt", "server.key");
+	webpp::https_server server("server.crt", "server.key");
 	server.m_config.port = 8080;
 
 	//Add resources using path-regex and method-string, and an anonymous function
@@ -123,7 +119,7 @@ int main() {
 
 	//Client examples
 	//Second Client() parameter set to false: no certificate verification
-	HttpsClient client("localhost:8080", false);
+	webpp::https_client client("localhost:8080", false);
 	auto r1=client.request("GET", "/match/123");
 	std::cout << r1->content.rdbuf() << std::endl;
 
