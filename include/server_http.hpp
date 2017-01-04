@@ -159,8 +159,7 @@ namespace webpp {
 		  class regex_orderable : public std::regex {
 			  std::string str;
 		  public:
-			  regex_orderable(const char *regex_cstr) : std::regex(regex_cstr), str(regex_cstr) {}
-			  regex_orderable(const std::string &regex_str) : std::regex(regex_str), str(regex_str) {}
+			  regex_orderable(std::regex reg, const std::string &regex_str) : std::regex(reg), str(regex_str) {}
 			  bool operator<(const regex_orderable &rhs) const {
 				  return str<rhs.str;
 			  }
@@ -168,16 +167,16 @@ namespace webpp {
 		using http_handler = std::function<void(std::shared_ptr<Response>, std::shared_ptr<Request>)>;
 
 	public:
-		template<class T> void on_get(std::string regex, T&& func) { path2regex::Keys keys; path2regex::path_to_regex(regex, keys); m_resource[regex]["GET"] = std::make_tuple(std::move(keys), func); }
-		template<class T> void on_get(T&& func) { m_default_resource["GET"] = func; }
-		template<class T> void on_post(std::string regex, T&& func) { path2regex::Keys keys; path2regex::path_to_regex(regex, keys); m_resource[regex]["POST"] = std::make_tuple(std::move(keys), func); }
-		template<class T> void on_post(T&& func) { m_default_resource["POST"] = func; }
-		template<class T> void on_put(std::string regex, T&& func) { path2regex::Keys keys; path2regex::path_to_regex(regex, keys); m_resource[regex]["PUT"] = std::make_tuple(std::move(keys), func); }
-		template<class T> void on_put(T&& func) { m_default_resource["PUT"] = func; }
-		template<class T> void on_patch(std::string regex, T&& func) { path2regex::Keys keys; path2regex::path_to_regex(regex, keys); m_resource[regex]["PATCH"] = std::make_tuple(std::move(keys), func); }
-		template<class T> void on_patch(T&& func) { m_default_resource["PATCH"] = func; }
-		template<class T> void on_delete(std::string regex, T&& func) { path2regex::Keys keys; path2regex::path_to_regex(regex, keys); m_resource[regex]["DELETE"] = std::make_tuple(std::move(keys), func); }
-		template<class T> void on_delete(T&& func) { m_default_resource["DELETE"] = func; }
+		template<class T> void on_get(std::string regex, T&& func) { std::lock_guard<std::mutex> lock(m_resource_mutex); path2regex::Keys keys; auto reg = path2regex::path_to_regex(regex, keys); m_resource[regex_orderable(reg,regex)]["GET"] = std::make_tuple(std::move(keys), func); }
+		template<class T> void on_get(T&& func) { std::lock_guard<std::mutex> lock(m_resource_mutex); m_default_resource["GET"] = func; }
+		template<class T> void on_post(std::string regex, T&& func) { std::lock_guard<std::mutex> lock(m_resource_mutex); path2regex::Keys keys; auto reg = path2regex::path_to_regex(regex, keys); m_resource[regex_orderable(reg, regex)]["POST"] = std::make_tuple(std::move(keys), func); }
+		template<class T> void on_post(T&& func) { std::lock_guard<std::mutex> lock(m_resource_mutex); m_default_resource["POST"] = func; }
+		template<class T> void on_put(std::string regex, T&& func) { std::lock_guard<std::mutex> lock(m_resource_mutex);  path2regex::Keys keys; auto reg = path2regex::path_to_regex(regex, keys); m_resource[regex_orderable(reg, regex)]["PUT"] = std::make_tuple(std::move(keys), func); }
+		template<class T> void on_put(T&& func) { std::lock_guard<std::mutex> lock(m_resource_mutex);  m_default_resource["PUT"] = func; }
+		template<class T> void on_patch(std::string regex, T&& func) { std::lock_guard<std::mutex> lock(m_resource_mutex); path2regex::Keys keys; auto reg = path2regex::path_to_regex(regex, keys); m_resource[regex_orderable(reg, regex)]["PATCH"] = std::make_tuple(std::move(keys), func); }
+		template<class T> void on_patch(T&& func) { std::lock_guard<std::mutex> lock(m_resource_mutex); m_default_resource["PATCH"] = func; }
+		template<class T> void on_delete(std::string regex, T&& func) { std::lock_guard<std::mutex> lock(m_resource_mutex); path2regex::Keys keys; auto reg = path2regex::path_to_regex(regex, keys); m_resource[regex_orderable(reg, regex)]["DELETE"] = std::make_tuple(std::move(keys), func); }
+		template<class T> void on_delete(T&& func) { std::lock_guard<std::mutex> lock(m_resource_mutex); m_default_resource["DELETE"] = func; }
 
 
 		std::function<void(std::shared_ptr<typename ServerBase<socket_type>::Request>, const std::error_code&)> on_error;
@@ -188,6 +187,8 @@ namespace webpp {
 		std::map<regex_orderable, std::map<std::string, std::tuple<path2regex::Keys, http_handler>>>  m_resource;
 
 		std::map<std::string, http_handler> m_default_resource;
+
+		std::mutex m_resource_mutex;
 	public:
 		virtual void start() {
 			if(!m_io_context)
@@ -364,6 +365,7 @@ namespace webpp {
 		}
 
 		void find_resource(const std::shared_ptr<socket_type> &socket, const std::shared_ptr<Request> &request) {
+			//std::lock_guard<std::mutex> lock(m_resource_mutex);
 			//Upgrade connection
 			if(on_upgrade) {
 				auto it=request->header.find("Upgrade");
