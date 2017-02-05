@@ -182,7 +182,7 @@ namespace webpp {
 		void remove_handler(std::string regex)
 		{
 			std::lock_guard<std::mutex> lock(m_resource_mutex);
-			for (auto &it = m_resource.begin(); it != m_resource.end(); ++it)
+			for (auto it = m_resource.begin(); it != m_resource.end(); ++it)
 			{
 				if (it->first.getstr() == regex)
 				{
