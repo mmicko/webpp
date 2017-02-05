@@ -64,6 +64,7 @@ namespace webpp {
 			}
 		};
 
+
 		class Connection {
 			friend class SocketServerBase<socket_type>;
 			friend class SocketServer<socket_type>;

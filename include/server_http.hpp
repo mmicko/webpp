@@ -90,11 +90,11 @@ namespace webpp {
 			size_t size() const { return m_streambuf.size(); }
 			std::shared_ptr<socket_type> socket() { return m_socket; }
 			
-            /// If true, force server to close the connection after the response have been sent.
-            ///
-            /// This is useful when implementing a HTTP/1.0-server sending content
-            /// without specifying the content length.
-            bool close_connection_after_response = false;
+			/// If true, force server to close the connection after the response have been sent.
+			///
+			/// This is useful when implementing a HTTP/1.0-server sending content
+			/// without specifying the content length.
+			bool close_connection_after_response = false;
 		};
 
 		class Content : public std::istream {

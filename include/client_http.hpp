@@ -70,8 +70,8 @@ namespace webpp {
 		public:
 			/// Set timeout on requests in seconds. Default value: 0 (no timeout).
 			size_t timeout = 0;
-            /// Set connect timeout in seconds. Default value: 0 (Config::timeout is then used instead).
-            size_t timeout_connect=0;			
+			/// Set connect timeout in seconds. Default value: 0 (Config::timeout is then used instead).
+			size_t timeout_connect=0;
 			/// Set proxy server (server:port)
 			std::string proxy_server;
 		};
@@ -216,8 +216,8 @@ namespace webpp {
 		virtual void connect()=0;
 
 		std::shared_ptr<asio::system_timer> get_timeout_timer(size_t timeout=0) {
-            if(timeout==0)
-                timeout=config.timeout;			
+			if(timeout==0)
+				timeout=config.timeout;
 			if (timeout == 0)
 				return nullptr;
 
