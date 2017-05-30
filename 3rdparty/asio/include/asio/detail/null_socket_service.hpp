@@ -80,6 +80,7 @@ public:
   // Move-construct a new socket implementation from another protocol type.
   template <typename Protocol1>
   void converting_move_construct(implementation_type&,
+      null_socket_service<Protocol1>&,
       typename null_socket_service<Protocol1>::implementation_type&)
   {
   }
@@ -117,6 +118,14 @@ public:
   {
     ec = asio::error::operation_not_supported;
     return ec;
+  }
+
+  // Release ownership of the socket.
+  native_handle_type release(implementation_type&,
+      asio::error_code& ec)
+  {
+    ec = asio::error::operation_not_supported;
+    return 0;
   }
 
   // Get the native socket representation.

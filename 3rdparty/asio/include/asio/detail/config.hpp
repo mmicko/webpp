@@ -83,6 +83,11 @@
 # endif // (__cplusplus >= 201103)
 #endif // defined(__clang__)
 
+// Android platform detection.
+#if defined(__ANDROID__)
+# include <android/api-level.h>
+#endif // defined(__ANDROID__)
+
 // Support move construction and assignment on compilers known to allow it.
 #if !defined(ASIO_HAS_MOVE)
 # if !defined(ASIO_DISABLE_MOVE)
@@ -569,6 +574,30 @@
 #  endif // defined(ASIO_MSVC)
 # endif // !defined(ASIO_DISABLE_NULLPTR)
 #endif // !defined(ASIO_HAS_NULLPTR)
+
+// Standard library support for the C++11 allocator additions.
+#if !defined(ASIO_HAS_CXX11_ALLOCATORS)
+# if !defined(ASIO_DISABLE_CXX11_ALLOCATORS)
+#  if defined(__clang__)
+#   if defined(ASIO_HAS_CLANG_LIBCXX)
+#    define ASIO_HAS_CXX11_ALLOCATORS 1
+#   elif (__cplusplus >= 201103)
+#    define ASIO_HAS_CXX11_ALLOCATORS 1
+#   endif // (__cplusplus >= 201103)
+#  elif defined(__GNUC__)
+#   if ((__GNUC__ == 4) && (__GNUC_MINOR__ >= 6)) || (__GNUC__ > 4)
+#    if defined(__GXX_EXPERIMENTAL_CXX0X__)
+#     define ASIO_HAS_CXX11_ALLOCATORS 1
+#    endif // defined(__GXX_EXPERIMENTAL_CXX0X__)
+#   endif // ((__GNUC__ == 4) && (__GNUC_MINOR__ >= 6)) || (__GNUC__ > 4)
+#  endif // defined(__GNUC__)
+#  if defined(ASIO_MSVC)
+#   if (_MSC_VER >= 1700)
+#    define ASIO_HAS_CXX11_ALLOCATORS 1
+#   endif // (_MSC_VER >= 1700)
+#  endif // defined(ASIO_MSVC)
+# endif // !defined(ASIO_DISABLE_CXX11_ALLOCATORS)
+#endif // !defined(ASIO_HAS_CXX11_ALLOCATORS)
 
 // Standard library support for the cstdint header.
 #if !defined(ASIO_HAS_CSTDINT)
@@ -1248,5 +1277,27 @@
 # define ASIO_SYNC_OP_VOID asio::error_code
 # define ASIO_SYNC_OP_VOID_RETURN(e) return e
 #endif // defined(ASIO_NO_DEPRECATED)
+
+// Newer gcc, clang need special treatment to suppress unused typedef warnings.
+#if defined(__clang__) && (__clang_major__ >= 7)
+# define ASIO_UNUSED_TYPEDEF __attribute__((__unused__))
+#elif defined(__GNUC__)
+# if ((__GNUC__ == 4) && (__GNUC_MINOR__ >= 8)) || (__GNUC__ > 4)
+#  define ASIO_UNUSED_TYPEDEF __attribute__((__unused__))
+# endif // ((__GNUC__ == 4) && (__GNUC_MINOR__ >= 8)) || (__GNUC__ > 4)
+#endif // defined(__GNUC__)
+#if !defined(ASIO_UNUSED_TYPEDEF)
+# define ASIO_UNUSED_TYPEDEF
+#endif // !defined(ASIO_UNUSED_TYPEDEF)
+
+// Some versions of gcc generate spurious warnings about unused variables.
+#if defined(__GNUC__)
+# if (__GNUC__ >= 4)
+#  define ASIO_UNUSED_VARIABLE __attribute__((__unused__))
+# endif // (__GNUC__ >= 4)
+#endif // defined(__GNUC__)
+#if !defined(ASIO_UNUSED_VARIABLE)
+# define ASIO_UNUSED_VARIABLE
+#endif // !defined(ASIO_UNUSED_VARIABLE)
 
 #endif // ASIO_DETAIL_CONFIG_HPP
