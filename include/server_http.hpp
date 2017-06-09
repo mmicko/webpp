@@ -443,16 +443,6 @@ namespace webpp {
 					if (timer)
 						timer->cancel();
 					if (!ec) {
-						float http_version;
-						try {
-							http_version = stof(request->http_version);
-						}
-						catch (const std::exception &) {
-							if (on_error)
-								on_error(request, std::error_code(EPROTO, std::generic_category()));
-							return;
-						}
-
 						if (response->close_connection_after_response)
                             return;
 
@@ -462,7 +452,7 @@ namespace webpp {
 							if (check(it->second, "close"))
 								return;
 						}
-						if (http_version > 1.05)
+						if(request->http_version >= "1.1")
 							read_request_and_content(response->socket());
 					}
 					else if (on_error)
