@@ -161,6 +161,12 @@ namespace webpp {
 			resolver->cancel();
 			if(internal_io_context)
 				io_context->stop();
+           
+            if(connection) {
+                std::error_code ec;
+                connection->socket->lowest_layer().shutdown(asio::ip::tcp::socket::shutdown_both, ec);
+                connection->socket->lowest_layer().close();
+            }			
 		}
 
 		///fin_rsv_opcode: 129=one fragment, text, 130=one fragment, binary, 136=close connection.
