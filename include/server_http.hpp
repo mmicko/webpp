@@ -450,8 +450,12 @@ namespace webpp {
 						auto range = request->header.equal_range("Connection");
 						case_insensitive_equals check;
 						for (auto it = range.first; it != range.second; ++it) {
-							if (check(it->second, "close"))
+							if (check(it->second, "close")) {
 								return;
+							 } else if (check(it->second, "keep-alive")) {
+                                this->read_request_and_content(response->socket());
+                                return;
+                            }
 						}
 						if(request->http_version >= "1.1")
 							read_request_and_content(response->socket());
