@@ -122,6 +122,7 @@ namespace webpp {
 			Content content;
 
 			std::unordered_multimap<std::string, std::string, case_insensitive_hash, case_insensitive_equals> header;
+			std::unordered_multimap<std::string, std::string, case_insensitive_hash, case_insensitive_equals> query_string;
 
 			path2regex::Keys keys;
 			std::map<std::string, std::string> params;
@@ -351,6 +352,24 @@ namespace webpp {
 				if((path_end=line.find(' ', method_end+1))!=std::string::npos) {
 					request->method=line.substr(0, method_end);
 					request->path=line.substr(method_end+1, path_end-method_end-1);
+
+					//search and populte query_string
+					size_t qs_start;
+					if ((qs_start = request->path.find('?')) != std::string::npos)
+					{
+						std::string qs = request->path.substr(qs_start, request->path.size() - qs_start - 1);
+						std::regex pattern("([\\w+%]+)=?([^&]*)");
+						int submatches[] = { 1, 2 };
+						auto qs_begin = std::sregex_token_iterator(qs.begin(), qs.end(), pattern, submatches);
+						auto qs_end = std::sregex_token_iterator();
+
+						for (auto i = qs_begin; i != qs_end; i++)
+						{
+							std::string key = i->str();
+							std::string value = (++i)->str();
+							request->query_string.emplace(std::make_pair(key, value));
+						}
+					}
 
 					size_t protocol_end;
 					if((protocol_end=line.find('/', path_end+1))!=std::string::npos) {
