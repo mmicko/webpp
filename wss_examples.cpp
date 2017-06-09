@@ -91,7 +91,7 @@ int main() {
 		auto message_str=message->string();
 
 		//echo_all.get_connections() can also be used to solely receive connections on this endpoint
-		for(auto a_connection: server.get_connections()) {
+		for(auto &a_connection: server.get_connections()) {
 			auto send_stream = std::make_shared<webpp::wss_server::SendStream>();
 			*send_stream << message_str;
 
